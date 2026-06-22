@@ -4,6 +4,7 @@ import {
   ACCESS_LEVELS,
   MIN_PANEL_LEVEL,
   ADVISOR_LEVEL,
+  DEPUTY_LEVEL,
   ASSISTANT_LEVEL,
   PROSECUTOR_LEVEL,
   APPEAL_STATUSES,
@@ -114,12 +115,25 @@ function prosecutorsWithCounts() {
 
 const statusList = () => APPEAL_STATUS_ORDER.map((key) => ({ key, ...APPEAL_STATUSES[key] }));
 
+// Дата сброса счётчика рассмотренных (после неё начинается новый отсчёт).
+function statsResetAt() {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'appeal_stats_reset_at'").get();
+  return row ? row.value : null;
+}
+
 // Статистика обращений сотрудника как назначенного прокурора.
 export function appealStatsFor(uid) {
   const ph = inProgressKeys.map(() => '?').join(',');
-  const reviewed = db
-    .prepare("SELECT COUNT(*) c FROM appeals WHERE assigned_user_id = ? AND status = 'reviewed'")
-    .get(uid).c;
+  const resetAt = statsResetAt();
+  const reviewed = resetAt
+    ? db
+        .prepare(
+          "SELECT COUNT(*) c FROM appeals WHERE assigned_user_id = ? AND status = 'reviewed' AND reviewed_at > ?",
+        )
+        .get(uid, resetAt).c
+    : db
+        .prepare("SELECT COUNT(*) c FROM appeals WHERE assigned_user_id = ? AND status = 'reviewed'")
+        .get(uid).c;
   const inProgress = db
     .prepare(`SELECT COUNT(*) c FROM appeals WHERE assigned_user_id = ? AND status IN (${ph})`)
     .get(uid, ...inProgressKeys).c;
@@ -153,6 +167,15 @@ router.get('/', requireLevel(MIN_PANEL_LEVEL), (_req, res) => {
 // Статистика обращений текущего пользователя (для своего профиля).
 router.get('/my-stats', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
   res.json({ stats: appealStatsFor(req.user.id) });
+});
+
+// Сброс счётчика рассмотренных у всех сотрудников — министр и заместители.
+router.post('/reset-stats', requireLevel(DEPUTY_LEVEL), (_req, res) => {
+  db.prepare(
+    `INSERT INTO settings (key, value) VALUES ('appeal_stats_reset_at', datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = datetime('now')`,
+  ).run();
+  res.json({ ok: true });
 });
 
 // Профиль обращения.

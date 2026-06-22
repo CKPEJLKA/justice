@@ -34,6 +34,7 @@ export const api = {
   updateAppeal: (id, body) => req(`/appeals/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteAppeal: (id) => req(`/appeals/${id}`, { method: 'DELETE' }),
   myAppealStats: () => req('/appeals/my-stats'),
+  resetAppealStats: () => req('/appeals/reset-stats', { method: 'POST' }),
   logout: () => req('/auth/logout', { method: 'POST' }),
   loginUrl: `${API_BASE}/api/auth/discord`,
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import Avatar from '../components/Avatar.jsx';
 
 function MemberCard({ member, top }) {
@@ -19,15 +20,29 @@ function MemberCard({ member, top }) {
 }
 
 export default function Employees() {
+  const { user } = useAuth();
   const [employees, setEmployees] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const load = () =>
     api
       .employees()
       .then((d) => setEmployees(d.employees))
       .catch(() => setError('Не удалось загрузить список сотрудников.'));
+
+  useEffect(() => {
+    load();
   }, []);
+
+  const resetStats = async () => {
+    if (!confirm('Сбросить счётчик рассмотренных обращений у всех сотрудников?')) return;
+    try {
+      await api.resetAppealStats();
+      load();
+    } catch {
+      setError('Не удалось сбросить счётчик.');
+    }
+  };
 
   // Группируем по уровню доступа и сортируем сверху вниз (от высшего).
   const tiers = useMemo(() => {
@@ -54,7 +69,14 @@ export default function Employees() {
           <div className="section-eyebrow">СОСТАВ</div>
           <h1 className="page-title">Структура министерства</h1>
         </div>
-        {employees && <div className="count-pill">{employees.length}</div>}
+        <div className="org-head-actions">
+          {user.permissions?.resetStats && (
+            <button className="ghost-btn sm danger-text" onClick={resetStats}>
+              Сбросить счётчик
+            </button>
+          )}
+          {employees && <div className="count-pill">{employees.length}</div>}
+        </div>
       </header>
 
       {error && <div className="card empty-state">{error}</div>}

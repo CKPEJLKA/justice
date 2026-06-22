@@ -61,6 +61,14 @@ for (const table of ['doc_categories', 'documents']) {
   }
 }
 
+// Простое хранилище настроек (ключ-значение): дата сброса счётчика и т.п.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+  );
+`);
+
 // Личные документы/шаблоны сотрудников (приватные, по user_id).
 db.exec(`
   CREATE TABLE IF NOT EXISTS personal_doc_categories (

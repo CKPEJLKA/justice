@@ -52,6 +52,7 @@ export function permissionsFor(level) {
     manageDocs: level >= DEPUTY_LEVEL, // министр, заместитель — категории и документы
     viewGeneral: level >= ADVISOR_LEVEL, // министр, заместитель, советник — Ген. прокуратура
     manageAppeals: level >= ADVISOR_LEVEL, // министр, заместитель, советник — обращения
+    resetStats: level >= DEPUTY_LEVEL, // министр, заместитель — сброс счётчика рассмотренных
   };
 }
 

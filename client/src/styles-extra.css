@@ -414,11 +414,14 @@
   position: relative;
 }
 
-.org-head .count-pill {
+.org-head-actions {
   position: absolute;
   right: 0;
   top: 50%;
   transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .org-structure {
