@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const D=require\\('better-sqlite3'\\);const db=new D\\('./data/justice.db'\\);console.log\\('Columns:', db.prepare\\('PRAGMA table_info\\(users\\)'\\).all\\(\\).map\\(c=>c.name\\).join\\(', '\\)\\);\")",
+      "Bash(npm run *)",
+      "Bash(node -e \"const D=require\\('better-sqlite3'\\);const db=new D\\('./data/justice.db'\\);for\\(const t of ['doc_categories','documents']\\){console.log\\(t+':', db.prepare\\('PRAGMA table_info\\('+t+'\\)'\\).all\\(\\).map\\(c=>c.name\\).join\\(', '\\)\\);}\")",
+      "Bash(curl -s -o /dev/null -w \"%{redirect_url}\\\\n\" \"http://localhost:5555/api/auth/discord\")",
+      "Bash(curl -sk -m 12 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://test.scr1pt.keentetic.pro/api/health\")",
+      "Bash(curl -s -m 12 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://test.scr1pt.keentetic.pro:5555/api/health\")",
+      "Bash(curl -sk -m 12 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://test.scr1pt.keentetic.pro:5555/api/health\")",
+      "Bash(curl -sk -m 15 -w \"\\\\nHTTP %{http_code}\\\\n\" \"https://test.scr1pt.keenetic.pro/api/health\")",
+      "Bash(node -e ' *)",
+      "Bash(node --check src/routes/api.js)",
+      "Bash(rm -f /tmp/a.log; echo cleaned)",
+      "WebFetch(domain:forum.gta5rp.com)",
+      "Bash(node --check src/forumSync.js)",
+      "Bash(node --check src/index.js)",
+      "Bash(node --check src/routes/appeals.js)",
+      "Bash(node --check src/db.js)",
+      "Bash(node --check src/routes/personalDocs.js)",
+      "Bash(node -e \"const D=require\\('better-sqlite3'\\);const db=new D\\('./data/justice.db',{readonly:true}\\);const r=db.prepare\\(\\\\\"SELECT COUNT\\(*\\) c FROM appeals WHERE source='forum' AND \\(forum_content IS NULL OR forum_content='' OR forum_content LIKE '%Читать далее%'\\)\\\\\"\\).get\\(\\);console.log\\('обращений с обрезанным/пустым текстом:', r.c\\);\")",
+      "Bash(node --check src/discordNotify.js)",
+      "Bash(git init *)",
+      "Bash(git config *)",
+      "Bash(git add *)",
+      "Bash(grep -E \"\\\\.env$|node_modules/|server/data/|/dist/\")"
+    ]
+  }
+}

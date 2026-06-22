@@ -1,0 +1,17 @@
+{
+  "name": "justice",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Сайт Министерства юстиции штата Senora (GTA5RP) — Node.js + React",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "dev": "concurrently -n server,client -c yellow,cyan \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "server": "npm --prefix server run dev",
+    "client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}

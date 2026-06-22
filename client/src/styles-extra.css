@@ -1,0 +1,718 @@
+/* ---------- Карточка министра ---------- */
+.minister-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background: linear-gradient(100deg, rgba(232, 198, 96, 0.1) 0%, var(--card) 60%);
+  border-color: rgba(232, 198, 96, 0.3);
+}
+
+.minister-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.minister-crown {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  border-radius: 14px;
+  background: var(--gold-soft);
+  border: 1px solid rgba(232, 198, 96, 0.3);
+}
+
+.minister-label {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.minister-name {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--gold);
+}
+
+/* ---------- Красная кнопка ---------- */
+.danger-btn {
+  background: linear-gradient(180deg, #c0392b, #962d22);
+  color: #fff;
+  border: 1px solid #d65a4c;
+  border-radius: 11px;
+  padding: 11px 20px;
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  transition: filter 0.15s, transform 0.1s;
+}
+
+.danger-btn:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.danger-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.danger-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------- Модальное окно ---------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal {
+  width: 100%;
+  max-width: 460px;
+  background: linear-gradient(180deg, var(--card) 0%, var(--bg-2) 100%);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 26px;
+}
+
+.modal-title {
+  margin: 0 0 14px;
+  font-size: 20px;
+}
+
+.modal-warn {
+  background: rgba(192, 57, 43, 0.12);
+  border: 1px solid rgba(214, 90, 76, 0.4);
+  color: #e7a79f;
+  border-radius: 11px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 0 18px;
+}
+
+.modal-label {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.modal-select {
+  width: 100%;
+}
+
+.modal-selected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 11px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+/* ---------- Редактирование имени ---------- */
+.edit-name-btn {
+  background: none;
+  border: none;
+  color: var(--muted-2);
+  font-size: 13px;
+  margin-left: 8px;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+
+.edit-name-btn:hover {
+  color: var(--gold);
+}
+
+.name-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.name-input {
+  background: var(--card-2);
+  color: var(--text);
+  border: 1px solid var(--gold-dim);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  min-width: 160px;
+}
+
+.name-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.mini-btn {
+  background: var(--card-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+}
+
+.mini-btn.save {
+  color: #7bd88f;
+  border-color: rgba(123, 216, 143, 0.4);
+}
+
+.mini-btn:hover {
+  border-color: var(--gold-dim);
+}
+
+/* ---------- Обращения ---------- */
+.pros-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.pros-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.pros-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pros-count {
+  min-width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--gold-soft);
+  border: 1px solid rgba(232, 198, 96, 0.25);
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.pros-count:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pros-count.active {
+  background: var(--gold);
+  color: #1a1505;
+}
+
+.pros-appeals {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.pros-appeal-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13.5px;
+  padding: 4px 0;
+}
+
+.pros-appeal-link:hover {
+  color: var(--gold);
+}
+
+.appeal-title-link {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.appeal-title-link:hover {
+  color: var(--gold);
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.muted-dash {
+  color: var(--muted-2);
+}
+
+.archive-card {
+  opacity: 0.92;
+}
+
+.archive-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 8px 8px;
+  cursor: pointer;
+}
+
+.archive-head .count-pill {
+  margin-left: 0;
+}
+
+.archive-toggle {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.src-chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.back-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13.5px;
+}
+
+.back-link:hover {
+  color: var(--gold);
+}
+
+.modal-row {
+  display: flex;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.appeal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.appeal-form .modal-label {
+  margin-top: 8px;
+}
+
+.name-input.full,
+.level-select.full {
+  width: 100%;
+}
+
+.appeal-note {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  background: var(--card-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.appeal-note:focus {
+  outline: none;
+  border-color: var(--gold-dim);
+}
+
+.appeal-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.forum-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+.forum-content img { max-width: 100%; height: auto; border-radius: 8px; }
+.forum-content a { color: var(--gold); }
+.forum-content blockquote {
+  margin: 10px 0;
+  padding: 8px 14px;
+  border-left: 3px solid var(--gold-dim);
+  background: var(--card-2);
+  border-radius: 0 8px 8px 0;
+  color: var(--muted);
+}
+.forum-content table { border-collapse: collapse; max-width: 100%; }
+.forum-content td, .forum-content th { padding: 4px 8px; }
+
+.assistant-editor {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.assistant-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.assistant-row .level-select {
+  flex: 1;
+  max-width: 320px;
+}
+
+/* ---------- Структура министерства (сотрудники) ---------- */
+.org-head {
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+.org-head .count-pill {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.org-structure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 940px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.org-tier {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.org-tier-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.org-tier-count {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.org-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+}
+
+.org-connector {
+  width: 2px;
+  height: 28px;
+  background: linear-gradient(var(--border), transparent);
+  margin: 10px 0;
+}
+
+.org-member {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 24px;
+  min-width: 176px;
+  gap: 4px;
+}
+
+.org-member-name {
+  font-weight: 600;
+  font-size: 15px;
+  margin-top: 10px;
+}
+
+.org-member-tag {
+  color: var(--muted-2);
+  font-size: 12.5px;
+}
+
+/* Министр — выделен наверху */
+.org-member-top {
+  padding: 24px 36px;
+  border-color: rgba(232, 198, 96, 0.45);
+  background: linear-gradient(160deg, rgba(232, 198, 96, 0.12) 0%, var(--card) 60%);
+  box-shadow: 0 0 30px rgba(232, 198, 96, 0.08);
+}
+
+.org-member-top .org-member-name {
+  font-size: 18px;
+  color: var(--gold);
+}
+
+.org-member-stats {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.org-member-stats .stat-reviewed {
+  color: #6cc18e;
+}
+.org-member-stats .stat-inwork {
+  color: var(--muted);
+}
+
+/* ---------- Часовой пояс на часах ---------- */
+.clock-tz {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  vertical-align: middle;
+}
+
+/* ---------- Прокуратура: панель выбора ---------- */
+.doc-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.doc-selects {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.field label {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.field select {
+  background: var(--card-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.field select:focus {
+  outline: none;
+  border-color: var(--gold-dim);
+}
+
+.field select:disabled {
+  opacity: 0.5;
+}
+
+.doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ghost-btn.sm {
+  padding: 9px 14px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.danger-text:hover {
+  border-color: var(--danger);
+}
+
+.save-btn {
+  background: linear-gradient(180deg, var(--gold), var(--gold-dim));
+  color: #1a1505;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.save-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---------- Прокуратура: два поля ---------- */
+.doc-editor {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.doc-pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-height: 460px;
+}
+
+.doc-pane-head {
+  padding: 12px 16px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold-dim);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+
+.doc-source {
+  flex: 1;
+  resize: none;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 16px;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.doc-source:focus {
+  outline: none;
+}
+
+.doc-preview {
+  flex: 1;
+  padding: 16px 20px;
+  overflow-y: auto;
+  line-height: 1.6;
+  font-size: 14px;
+  white-space: pre-wrap; /* переносы строк из BB-Code сохраняются как есть */
+}
+
+.doc-preview .bb-tr {
+  white-space: pre-wrap;
+}
+
+.doc-preview:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(232, 198, 96, 0.25);
+}
+
+.doc-preview h1 { font-size: 26px; margin: 0.4em 0; }
+.doc-preview h2 { font-size: 21px; margin: 0.4em 0; }
+.doc-preview h3 { font-size: 17px; margin: 0.4em 0; }
+.doc-preview a { color: var(--gold); }
+.doc-preview img { max-width: 100%; border-radius: 8px; }
+.doc-preview hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+.doc-preview blockquote {
+  margin: 10px 0;
+  padding: 8px 14px;
+  border-left: 3px solid var(--gold-dim);
+  background: var(--card-2);
+  border-radius: 0 8px 8px 0;
+  color: var(--muted);
+}
+.doc-preview ul, .doc-preview ol { padding-left: 22px; }
+.doc-preview .bb-indent { margin-left: 30px; }
+/* Пустой [INDENT][/INDENT] — намеренный отступ в одну строку */
+.doc-preview .bb-indent:empty { min-height: 1.2em; }
+.doc-preview table.bb-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+}
+.doc-preview table.bb-table td,
+.doc-preview table.bb-table th {
+  padding: 4px 8px;
+  vertical-align: top;
+}
+
+@media (max-width: 880px) {
+  .doc-editor {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .minister-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

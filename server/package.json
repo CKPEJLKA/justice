@@ -1,0 +1,19 @@
+{
+  "name": "justice-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Бэкенд сайта Министерства юстиции штата Senora (GTA5RP)",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "better-sqlite3-session-store": "^0.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-session": "^1.18.1"
+  }
+}
