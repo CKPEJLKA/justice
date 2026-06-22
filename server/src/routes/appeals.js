@@ -125,14 +125,17 @@ function statsResetAt() {
 export function appealStatsFor(uid) {
   const ph = inProgressKeys.map(() => '?').join(',');
   const resetAt = statsResetAt();
+  // «Рассмотрено» учитывает завершённые обращения: и «Рассмотрено», и «Отказано».
   const reviewed = resetAt
     ? db
         .prepare(
-          "SELECT COUNT(*) c FROM appeals WHERE assigned_user_id = ? AND status = 'reviewed' AND reviewed_at > ?",
+          "SELECT COUNT(*) c FROM appeals WHERE assigned_user_id = ? AND status IN ('reviewed', 'refused') AND reviewed_at > ?",
         )
         .get(uid, resetAt).c
     : db
-        .prepare("SELECT COUNT(*) c FROM appeals WHERE assigned_user_id = ? AND status = 'reviewed'")
+        .prepare(
+          "SELECT COUNT(*) c FROM appeals WHERE assigned_user_id = ? AND status IN ('reviewed', 'refused')",
+        )
         .get(uid).c;
   const inProgress = db
     .prepare(`SELECT COUNT(*) c FROM appeals WHERE assigned_user_id = ? AND status IN (${ph})`)
