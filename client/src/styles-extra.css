@@ -524,6 +524,9 @@
 .org-member-stats .stat-inwork {
   color: var(--muted);
 }
+.org-member-stats .stat-total {
+  color: var(--gold-dim);
+}
 
 /* ---------- Часовой пояс на часах ---------- */
 .clock-tz {

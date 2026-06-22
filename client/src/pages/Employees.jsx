@@ -10,9 +10,10 @@ function MemberCard({ member, top }) {
       <div className="org-member-name">{member.name}</div>
       <div className="org-member-tag">@{member.username}</div>
       {member.appealStats && (
-        <div className="org-member-stats" title="Обращения, где назначен прокурором">
+        <div className="org-member-stats" title="Рассмотрено · в работе · всего назначено">
           <span className="stat-reviewed">✅ {member.appealStats.reviewed}</span>
           <span className="stat-inwork">⏳ {member.appealStats.inProgress}</span>
+          <span className="stat-total">📨 {member.appealStats.total}</span>
         </div>
       )}
     </div>
