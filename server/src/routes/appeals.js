@@ -11,6 +11,7 @@ import {
   APPEAL_STATUS_ORDER,
 } from '../config.js';
 import { requireLevel } from '../middleware/auth.js';
+import { notifyAssignment } from '../assignNotify.js';
 
 const router = express.Router();
 // Управление обращениями — министр, заместитель, советник.
@@ -217,7 +218,24 @@ router.post('/', requireManage, (req, res) => {
   if (ARCHIVABLE_STATUSES.has(status)) {
     db.prepare("UPDATE appeals SET reviewed_at = datetime('now') WHERE id = ?").run(info.lastInsertRowid);
   }
-  res.json({ appeal: publicAppeal(db.prepare('SELECT * FROM appeals WHERE id = ?').get(info.lastInsertRowid)) });
+  const created = db.prepare('SELECT * FROM appeals WHERE id = ?').get(info.lastInsertRowid);
+  res.json({ appeal: publicAppeal(created) });
+
+  // Уведомление о назначении прокурора (в фоне через облачную функцию).
+  if (assignedUserId) {
+    const target = db.prepare('SELECT * FROM users WHERE id = ?').get(assignedUserId);
+    if (target && target.discord_id !== req.user.discord_id) {
+      notifyAssignment({
+        appealId: created.id,
+        appealTitle: created.title,
+        assignerName: userName(req.user),
+        assignerDiscordId: req.user.discord_id,
+        prosecutorName: userName(target),
+        prosecutorDiscordId: target.discord_id,
+        forumUrl: created.forum_url,
+      });
+    }
+  }
 });
 
 router.patch('/:id', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
@@ -269,11 +287,13 @@ router.patch('/:id', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
       updates.push('reviewed_at = NULL');
     }
   }
+  let newAssignedId; // undefined = поле не трогали
   if (req.body.assignedUserId !== undefined) {
     let id = req.body.assignedUserId ? Number(req.body.assignedUserId) : null;
     if (id && !validUser(id)) id = null;
     updates.push('assigned_user_id = ?');
     params.push(id);
+    newAssignedId = id;
   }
   if (req.body.assistantUserId !== undefined) {
     let id = req.body.assistantUserId ? Number(req.body.assistantUserId) : null;
@@ -291,7 +311,24 @@ router.patch('/:id', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
   db.prepare(`UPDATE appeals SET ${updates.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(
     ...params,
   );
-  res.json({ appeal: publicAppeal(db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id)) });
+  const updated = db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id);
+  res.json({ appeal: publicAppeal(updated) });
+
+  // Назначен новый прокурор → уведомляем (в фоне через облачную функцию).
+  if (newAssignedId && newAssignedId !== a.assigned_user_id) {
+    const target = db.prepare('SELECT * FROM users WHERE id = ?').get(newAssignedId);
+    if (target && target.discord_id !== req.user.discord_id) {
+      notifyAssignment({
+        appealId: updated.id,
+        appealTitle: updated.title,
+        assignerName: userName(req.user),
+        assignerDiscordId: req.user.discord_id,
+        prosecutorName: userName(target),
+        prosecutorDiscordId: target.discord_id,
+        forumUrl: updated.forum_url,
+      });
+    }
+  }
 });
 
 router.delete('/:id', requireManage, (req, res) => {

@@ -24,7 +24,9 @@
       "Bash(git config *)",
       "Bash(git add *)",
       "Bash(grep -E \"\\\\.env$|node_modules/|server/data/|/dist/\")",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(node --check yandex-function/index.js)",
+      "Bash(node --check src/assignNotify.js)"
     ]
   }
 }
