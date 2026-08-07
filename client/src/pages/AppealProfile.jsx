@@ -24,6 +24,7 @@ export default function AppealProfile() {
   const [savedForm, setSavedForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [actionMsg, setActionMsg] = useState(null);
 
   const apply = (d) => {
     setAppeal(d.appeal);
@@ -43,13 +44,43 @@ export default function AppealProfile() {
     setSavedForm(f);
   };
 
+  const load = () => api.appeal(id).then(apply).catch(() => setError('Не удалось загрузить обращение.'));
+
   useEffect(() => {
-    api.appeal(id).then(apply).catch(() => setError('Не удалось загрузить обращение.'));
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Помощника может менять руководство ИЛИ назначенный на обращение прокурор.
   const isAssignedProsecutor = appeal?.assignedUser && appeal.assignedUser.id === user.id;
   const canEditAssistant = canManage || isAssignedProsecutor;
+  // «Взять в работу» — все, кроме помощников; и только если ещё не назначен на себя.
+  const canTake = user.permissions?.takeAppeals && appeal?.assignedUser?.id !== user.id;
+  // «Уведомить ведущего прокурора» — руководство, если прокурор назначен.
+  const canNotify = canManage && !!appeal?.assignedUser;
+
+  const take = async () => {
+    setActionMsg(null);
+    setError(null);
+    try {
+      await api.takeAppeal(id);
+      await load();
+      setActionMsg('Вы назначены на обращение.');
+    } catch {
+      setError('Не удалось взять обращение в работу.');
+    }
+  };
+
+  const notifyLead = async () => {
+    setActionMsg(null);
+    setError(null);
+    try {
+      await api.notifyAppeal(id);
+      setActionMsg('Уведомление отправлено ведущему прокурору.');
+    } catch {
+      setError('Не удалось отправить уведомление.');
+    }
+  };
 
   const dirty = form && savedForm && JSON.stringify(form) !== JSON.stringify(savedForm);
   const set = (k, v) => setForm({ ...form, [k]: v });
@@ -92,6 +123,11 @@ export default function AppealProfile() {
           <h1 className="page-title" style={{ marginTop: 6 }}>{appeal.title}</h1>
         </div>
         <div className="doc-actions">
+          {canNotify && (
+            <button className="ghost-btn sm" onClick={notifyLead}>
+              Уведомить ведущего прокурора
+            </button>
+          )}
           {appeal.forumUrl ? (
             <a className="save-btn" href={appeal.forumUrl} target="_blank" rel="noopener">
               Перейти на обращение ↗
@@ -101,6 +137,8 @@ export default function AppealProfile() {
           )}
         </div>
       </header>
+
+      {actionMsg && <div className="card action-msg">{actionMsg}</div>}
 
       {error && <div className="card empty-state error-text">{error}</div>}
 
@@ -202,6 +240,12 @@ export default function AppealProfile() {
               </div>
             )}
           </>
+        )}
+
+        {canTake && (
+          <div className="take-appeal-bar">
+            <button className="take-btn" onClick={take}>Взять в работу</button>
+          </div>
         )}
       </section>
 

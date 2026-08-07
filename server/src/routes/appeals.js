@@ -218,24 +218,7 @@ router.post('/', requireManage, (req, res) => {
   if (ARCHIVABLE_STATUSES.has(status)) {
     db.prepare("UPDATE appeals SET reviewed_at = datetime('now') WHERE id = ?").run(info.lastInsertRowid);
   }
-  const created = db.prepare('SELECT * FROM appeals WHERE id = ?').get(info.lastInsertRowid);
-  res.json({ appeal: publicAppeal(created) });
-
-  // Уведомление о назначении прокурора (в фоне через облачную функцию).
-  if (assignedUserId) {
-    const target = db.prepare('SELECT * FROM users WHERE id = ?').get(assignedUserId);
-    if (target && target.discord_id !== req.user.discord_id) {
-      notifyAssignment({
-        appealId: created.id,
-        appealTitle: created.title,
-        assignerName: userName(req.user),
-        assignerDiscordId: req.user.discord_id,
-        prosecutorName: userName(target),
-        prosecutorDiscordId: target.discord_id,
-        forumUrl: created.forum_url,
-      });
-    }
-  }
+  res.json({ appeal: publicAppeal(db.prepare('SELECT * FROM appeals WHERE id = ?').get(info.lastInsertRowid)) });
 });
 
 router.patch('/:id', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
@@ -287,13 +270,11 @@ router.patch('/:id', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
       updates.push('reviewed_at = NULL');
     }
   }
-  let newAssignedId; // undefined = поле не трогали
   if (req.body.assignedUserId !== undefined) {
     let id = req.body.assignedUserId ? Number(req.body.assignedUserId) : null;
     if (id && !validUser(id)) id = null;
     updates.push('assigned_user_id = ?');
     params.push(id);
-    newAssignedId = id;
   }
   if (req.body.assistantUserId !== undefined) {
     let id = req.body.assistantUserId ? Number(req.body.assistantUserId) : null;
@@ -311,24 +292,38 @@ router.patch('/:id', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
   db.prepare(`UPDATE appeals SET ${updates.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(
     ...params,
   );
-  const updated = db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id);
-  res.json({ appeal: publicAppeal(updated) });
+  res.json({ appeal: publicAppeal(db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id)) });
+});
 
-  // Назначен новый прокурор → уведомляем (в фоне через облачную функцию).
-  if (newAssignedId && newAssignedId !== a.assigned_user_id) {
-    const target = db.prepare('SELECT * FROM users WHERE id = ?').get(newAssignedId);
-    if (target && target.discord_id !== req.user.discord_id) {
-      notifyAssignment({
-        appealId: updated.id,
-        appealTitle: updated.title,
-        assignerName: userName(req.user),
-        assignerDiscordId: req.user.discord_id,
-        prosecutorName: userName(target),
-        prosecutorDiscordId: target.discord_id,
-        forumUrl: updated.forum_url,
-      });
-    }
-  }
+// Взять обращение в работу — назначить себя (все, кроме помощников). Без уведомления.
+router.post('/:id/take', requireLevel(PROSECUTOR_LEVEL), (req, res) => {
+  const a = db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id);
+  if (!a) return res.status(404).json({ error: 'not_found' });
+  db.prepare(`UPDATE appeals SET assigned_user_id = ?, updated_at = datetime('now') WHERE id = ?`).run(
+    req.user.id,
+    req.params.id,
+  );
+  res.json({ appeal: publicAppeal(db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id)) });
+});
+
+// Уведомить ведущего прокурора вручную — только руководство (генеральная прокуратура).
+router.post('/:id/notify', requireLevel(ADVISOR_LEVEL), (req, res) => {
+  const a = db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id);
+  if (!a) return res.status(404).json({ error: 'not_found' });
+  if (!a.assigned_user_id) return res.status(400).json({ error: 'no_assignee' });
+  const target = db.prepare('SELECT * FROM users WHERE id = ?').get(a.assigned_user_id);
+  if (!target) return res.status(400).json({ error: 'no_assignee' });
+
+  notifyAssignment({
+    appealId: a.id,
+    appealTitle: a.title,
+    assignerName: userName(req.user),
+    assignerDiscordId: req.user.discord_id,
+    prosecutorName: userName(target),
+    prosecutorDiscordId: target.discord_id,
+    forumUrl: a.forum_url,
+  });
+  res.json({ ok: true });
 });
 
 router.delete('/:id', requireManage, (req, res) => {

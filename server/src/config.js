@@ -53,6 +53,7 @@ export function permissionsFor(level) {
     viewGeneral: level >= ADVISOR_LEVEL, // министр, заместитель, советник — Ген. прокуратура
     manageAppeals: level >= ADVISOR_LEVEL, // министр, заместитель, советник — обращения
     resetStats: level >= DEPUTY_LEVEL, // министр, заместитель — сброс счётчика рассмотренных
+    takeAppeals: level >= PROSECUTOR_LEVEL, // все, кроме помощников прокурора — «взять в работу»
   };
 }
 

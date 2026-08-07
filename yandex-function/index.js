@@ -37,14 +37,12 @@ exports.handler = async (event) => {
     return resp(500, { error: 'webhook_not_configured' });
   }
 
-  // Проверка секрета (если задан в окружении).
   if (AUTH_TOKEN) {
     const h = event.headers || {};
     const token = h['X-Auth-Token'] || h['x-auth-token'];
     if (token !== AUTH_TOKEN) return resp(401, { error: 'unauthorized' });
   }
 
-  // Тело может прийти в base64 (зависит от способа вызова функции).
   let payload;
   try {
     const raw = event.isBase64Encoded
@@ -65,12 +63,10 @@ exports.handler = async (event) => {
     forumUrl = '',
   } = payload;
 
-  // Вебхуки не поддерживают кнопки, поэтому ссылки — кликабельным текстом в embed.
   const links = [];
   if (siteUrl) links.push(`[Открыть на сайте](${siteUrl})`);
   if (forumUrl) links.push(`[Открыть на форуме](${forumUrl})`);
 
-  // В полях — упоминания по ID (кликабельны, ведут в профиль). Если ID нет — имя.
   const prosecutorValue = prosecutorDiscordId ? `<@${prosecutorDiscordId}>` : String(prosecutorName || '—');
   const assignerValue = assignerDiscordId ? `<@${assignerDiscordId}>` : String(assignerName || '—');
 
@@ -90,7 +86,6 @@ exports.handler = async (event) => {
         timestamp: new Date().toISOString(),
       },
     ],
-    // Пинг назначенного прокурора (если передан его Discord ID).
     allowed_mentions: {
       parse: [],
       users: prosecutorDiscordId ? [String(prosecutorDiscordId)] : [],

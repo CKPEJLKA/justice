@@ -6,7 +6,36 @@ import db from '../db.js';
 const router = express.Router();
 const DISCORD_API = 'https://discord.com/api';
 
-// Шаг 1: редирект пользователя на страницу авторизации Discord.
+// Создаёт/обновляет пользователя по данным из Discord, возвращает его discord_id.
+function upsertDiscordUser(du) {
+  const isAdmin = config.adminDiscordIds.includes(du.id);
+  const existing = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(du.id);
+  if (existing) {
+    const level = isAdmin ? TOP_LEVEL : existing.access_level;
+    db.prepare(
+      `UPDATE users SET username = ?, global_name = ?, avatar = ?, access_level = ?, updated_at = datetime('now')
+       WHERE discord_id = ?`,
+    ).run(du.username, du.global_name || null, du.avatar || null, level, du.id);
+  } else {
+    const level = isAdmin ? TOP_LEVEL : 0;
+    db.prepare(
+      `INSERT INTO users (discord_id, username, global_name, avatar, access_level) VALUES (?, ?, ?, ?, ?)`,
+    ).run(du.id, du.username, du.global_name || null, du.avatar || null, level);
+  }
+  return du.id;
+}
+
+async function fetchDiscordUser(accessToken) {
+  const res = await fetch(`${DISCORD_API}/users/@me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`user fetch failed: ${res.status}`);
+  return res.json();
+}
+
+// ===== Обычный сайт: OAuth2 через редирект (сессионная кука) =====
+
+// Шаг 1: редирект на страницу авторизации Discord.
 router.get('/discord', (req, res) => {
   if (!config.discord.clientId) {
     return res.redirect(`${config.clientUrl}/login?error=not_configured`);
@@ -33,7 +62,6 @@ router.get('/discord/callback', async (req, res) => {
   delete req.session.oauthState;
 
   try {
-    // Обмен кода на access_token.
     const tokenRes = await fetch(`${DISCORD_API}/oauth2/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -48,33 +76,8 @@ router.get('/discord/callback', async (req, res) => {
     if (!tokenRes.ok) throw new Error(`token exchange failed: ${tokenRes.status}`);
     const token = await tokenRes.json();
 
-    // Получаем профиль пользователя.
-    const userRes = await fetch(`${DISCORD_API}/users/@me`, {
-      headers: { Authorization: `Bearer ${token.access_token}` },
-    });
-    if (!userRes.ok) throw new Error(`user fetch failed: ${userRes.status}`);
-    const du = await userRes.json();
-
-    const isAdmin = config.adminDiscordIds.includes(du.id);
-    const existing = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(du.id);
-
-    if (existing) {
-      // Сохраняем актуальные данные профиля; админам гарантируем высший уровень.
-      const level = isAdmin ? TOP_LEVEL : existing.access_level;
-      db.prepare(
-        `UPDATE users
-           SET username = ?, global_name = ?, avatar = ?, access_level = ?, updated_at = datetime('now')
-         WHERE discord_id = ?`,
-      ).run(du.username, du.global_name || null, du.avatar || null, level, du.id);
-    } else {
-      const level = isAdmin ? TOP_LEVEL : 0;
-      db.prepare(
-        `INSERT INTO users (discord_id, username, global_name, avatar, access_level)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).run(du.id, du.username, du.global_name || null, du.avatar || null, level);
-    }
-
-    req.session.discordId = du.id;
+    const du = await fetchDiscordUser(token.access_token);
+    req.session.discordId = upsertDiscordUser(du);
     res.redirect(`${config.clientUrl}/`);
   } catch (err) {
     console.error('OAuth error:', err);

@@ -4,8 +4,7 @@ import db from '../db.js';
 export function loadUser(req, _res, next) {
   if (req.session.discordId) {
     req.user =
-      db.prepare('SELECT * FROM users WHERE discord_id = ?').get(req.session.discordId) ||
-      null;
+      db.prepare('SELECT * FROM users WHERE discord_id = ?').get(req.session.discordId) || null;
   } else {
     req.user = null;
   }
