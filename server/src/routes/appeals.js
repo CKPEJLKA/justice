@@ -3,6 +3,7 @@ import db from '../db.js';
 import {
   ACCESS_LEVELS,
   MIN_PANEL_LEVEL,
+  ADMIN_ROLE_LEVEL,
   ADVISOR_LEVEL,
   DEPUTY_LEVEL,
   ASSISTANT_LEVEL,
@@ -76,10 +77,13 @@ function publicAppeal(a) {
 }
 
 // Кандидаты на роль основного исполнителя: прокуроры + руководящий состав.
+// Администраторы скрыты — их нет в списках назначения.
 function assigneeCandidates() {
   return db
-    .prepare('SELECT * FROM users WHERE access_level >= ? ORDER BY access_level DESC, username')
-    .all(PROSECUTOR_LEVEL)
+    .prepare(
+      'SELECT * FROM users WHERE access_level >= ? AND access_level != ? ORDER BY access_level DESC, username',
+    )
+    .all(PROSECUTOR_LEVEL, ADMIN_ROLE_LEVEL)
     .map((u) => userBrief(u.id));
 }
 
@@ -93,11 +97,13 @@ function assistantCandidates() {
 
 const inProgressKeys = APPEAL_STATUS_ORDER.filter((k) => APPEAL_STATUSES[k].inProgress);
 
-// Сотрудники (включая руководство) с числом обращений «в работе».
+// Сотрудники (включая руководство) с числом обращений «в работе». Администраторы скрыты.
 function prosecutorsWithCounts() {
   const rows = db
-    .prepare('SELECT * FROM users WHERE access_level >= ? ORDER BY access_level DESC, username')
-    .all(MIN_PANEL_LEVEL);
+    .prepare(
+      'SELECT * FROM users WHERE access_level >= ? AND access_level != ? ORDER BY access_level DESC, username',
+    )
+    .all(MIN_PANEL_LEVEL, ADMIN_ROLE_LEVEL);
   const placeholders = inProgressKeys.map(() => '?').join(',');
   // Считаем обращения «в работе», где человек назначен как прокурор ИЛИ как помощник.
   const countStmt = db.prepare(

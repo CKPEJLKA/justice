@@ -67,15 +67,17 @@ router.get('/meta', (_req, res) => {
 });
 
 // Статистика для главной + текущий министр.
+// Администраторов нигде не показываем и не считаем (кроме админ-панели у министра).
 router.get('/stats', requireLevel(MIN_PANEL_LEVEL), (_req, res) => {
-  const staff = db.prepare('SELECT COUNT(*) c FROM users WHERE access_level >= ?').get(MIN_PANEL_LEVEL).c;
+  const staff = db
+    .prepare('SELECT COUNT(*) c FROM users WHERE access_level >= ? AND access_level != ?')
+    .get(MIN_PANEL_LEVEL, ADMIN_ROLE_LEVEL).c;
   const minister = db
     .prepare('SELECT * FROM users WHERE access_level = ? ORDER BY updated_at LIMIT 1')
     .get(TOP_LEVEL);
 
   res.json({
     staff,
-    admins: countAt(ADMIN_ROLE_LEVEL),
     deputies: countAt(DEPUTY_LEVEL),
     advisors: countAt(ADVISOR_LEVEL),
     prosecutors: countAt(PROSECUTOR_LEVEL),
@@ -88,10 +90,13 @@ router.get('/stats', requireLevel(MIN_PANEL_LEVEL), (_req, res) => {
 });
 
 // Список сотрудников (с доступом). Статистику обращений видят министр/заместитель/советник.
+// Администраторы в структуру не попадают — их видно только в админ-панели у министра.
 router.get('/employees', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
   const rows = db
-    .prepare('SELECT * FROM users WHERE access_level >= ? ORDER BY access_level DESC, username')
-    .all(MIN_PANEL_LEVEL);
+    .prepare(
+      'SELECT * FROM users WHERE access_level >= ? AND access_level != ? ORDER BY access_level DESC, username',
+    )
+    .all(MIN_PANEL_LEVEL, ADMIN_ROLE_LEVEL);
   const canViewStats = req.user.access_level >= ADVISOR_LEVEL;
   const employees = rows.map((u) => {
     const pu = publicUser(u);
@@ -102,9 +107,12 @@ router.get('/employees', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
 });
 
 // --- Админ: пользователи (министр / заместитель / советник) ---
-router.get('/admin/users', requireLevel(ADMIN_LEVEL), (_req, res) => {
+router.get('/admin/users', requireLevel(ADMIN_LEVEL), (req, res) => {
   const rows = db.prepare('SELECT * FROM users ORDER BY access_level DESC, created_at').all();
-  res.json({ users: rows.map((u) => publicUser(u)) });
+  // Администраторов в списке видит только министр.
+  const canSeeAdmins = permissionsFor(req.user.access_level).manageAdmins;
+  const visible = canSeeAdmins ? rows : rows.filter((u) => u.access_level !== ADMIN_ROLE_LEVEL);
+  res.json({ users: visible.map((u) => publicUser(u)) });
 });
 
 // Изменение имени и/или уровня доступа.
