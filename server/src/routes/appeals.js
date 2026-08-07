@@ -296,9 +296,13 @@ router.patch('/:id', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
 });
 
 // Взять обращение в работу — назначить себя (все, кроме помощников). Без уведомления.
+// Можно только для статуса «Не взято в работу» и если прокурор ещё не назначен.
 router.post('/:id/take', requireLevel(PROSECUTOR_LEVEL), (req, res) => {
   const a = db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id);
   if (!a) return res.status(404).json({ error: 'not_found' });
+  if (a.status !== 'not_taken' || a.assigned_user_id) {
+    return res.status(400).json({ error: 'not_takeable' });
+  }
   db.prepare(`UPDATE appeals SET assigned_user_id = ?, updated_at = datetime('now') WHERE id = ?`).run(
     req.user.id,
     req.params.id,

@@ -26,7 +26,22 @@
       "Bash(grep -E \"\\\\.env$|node_modules/|server/data/|/dist/\")",
       "Bash(git commit -q -m ' *)",
       "Bash(node --check yandex-function/index.js)",
-      "Bash(node --check src/assignNotify.js)"
+      "Bash(node --check src/assignNotify.js)",
+      "Bash(npm install *)",
+      "Bash(node --check src/authToken.js)",
+      "Bash(node --check src/auth/discord.js)",
+      "Bash(node --check src/middleware/auth.js)",
+      "Bash(node --check src/config.js)",
+      "Bash(echo \"=== наш текущий UA \\(JusticeBot\\) ===\")",
+      "Bash(curl -s -o /dev/null -w 'HTTP %{http_code}\\\\n' -A JusticeBot/1.0 https://forum.gta5rp.com/forums/obraschenija-v-prokuraturu.2082/index.rss)",
+      "Bash(echo \"=== браузерный UA ===\")",
+      "Bash(curl -s -o /dev/null -w 'HTTP %{http_code}\\\\n' -A 'Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/125.0.0.0 Safari/537.36' -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' -H 'Accept-Language: ru-RU,ru;q=0.9,en;q=0.8' https://forum.gta5rp.com/forums/obraschenija-v-prokuraturu.2082/index.rss)",
+      "Bash(curl -s -D - -o /dev/null -A 'Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/125.0.0.0 Safari/537.36' https://forum.gta5rp.com/forums/obraschenija-v-prokuraturu.2082/index.rss)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://old-releases.ubuntu.com/ubuntu/dists/mantic/Release\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"http://old-releases.ubuntu.com/ubuntu-ports/\")",
+      "Bash(curl -s \"http://ports.ubuntu.com/ubuntu-ports/dists/\")",
+      "Bash(git check-ignore *)",
+      "Bash(git status *)"
     ]
   }
 }

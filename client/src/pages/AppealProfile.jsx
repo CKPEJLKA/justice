@@ -54,8 +54,9 @@ export default function AppealProfile() {
   // Помощника может менять руководство ИЛИ назначенный на обращение прокурор.
   const isAssignedProsecutor = appeal?.assignedUser && appeal.assignedUser.id === user.id;
   const canEditAssistant = canManage || isAssignedProsecutor;
-  // «Взять в работу» — все, кроме помощников; и только если ещё не назначен на себя.
-  const canTake = user.permissions?.takeAppeals && appeal?.assignedUser?.id !== user.id;
+  // «Взять в работу» — все, кроме помощников; только для «Не взято в работу» и без назначенного прокурора.
+  const canTake =
+    user.permissions?.takeAppeals && appeal?.status === 'not_taken' && !appeal?.assignedUser;
   // «Уведомить ведущего прокурора» — руководство, если прокурор назначен.
   const canNotify = canManage && !!appeal?.assignedUser;
 
