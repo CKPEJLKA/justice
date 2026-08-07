@@ -67,6 +67,7 @@ export default function Dashboard() {
 
         <div className="stat-grid">
           <StatCard icon="👥" label="Кол-во сотрудников" value={stats?.staff ?? '—'} />
+          <StatCard icon="🛡️" label="Администраторов" value={stats?.admins ?? '—'} />
           <StatCard icon="🥈" label="Заместителей" value={stats?.deputies ?? '—'} />
           <StatCard icon="🎖️" label="Советников" value={stats?.advisors ?? '—'} />
           <StatCard icon="⚖️" label="Прокуроров" value={stats?.prosecutors ?? '—'} />

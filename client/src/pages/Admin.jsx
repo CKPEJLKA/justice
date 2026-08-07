@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
-import { MIN_PANEL_LEVEL, TOP_LEVEL } from '../constants.js';
+import { MIN_PANEL_LEVEL, ADMIN_ROLE_LEVEL, TOP_LEVEL } from '../constants.js';
 import Avatar from '../components/Avatar.jsx';
 
 const ERRORS = {
@@ -11,6 +11,8 @@ const ERRORS = {
   above_your_level: 'Нельзя выдать уровень выше вашего собственного.',
   target_above_you: 'Нельзя изменять пользователя с уровнем выше вашего.',
   minister_via_transfer: 'Роль министра меняется только через передачу роли.',
+  admin_via_minister: 'Назначать и снимать Администраторов может только министр.',
+  admin_delete_minister_only: 'Удалить Администратора может только министр.',
   cannot_delete_self: 'Нельзя удалить самого себя.',
   cannot_delete_minister: 'Нельзя удалить министра — сначала передайте роль.',
 };
@@ -42,6 +44,7 @@ export default function Admin() {
       (l) =>
         l.value !== TOP_LEVEL &&
         l.value <= me.accessLevel &&
+        (l.value !== ADMIN_ROLE_LEVEL || me.permissions.manageAdmins) &&
         (l.value >= MIN_PANEL_LEVEL || me.permissions.authorizeUsers),
     )
     .sort((a, b) => a.value - b.value);
@@ -49,6 +52,7 @@ export default function Admin() {
   const canEditLevel = (t) => {
     if (!me.permissions.changeRoles) return false;
     if (t.accessLevel === TOP_LEVEL) return false; // министр — только через передачу
+    if (t.accessLevel === ADMIN_ROLE_LEVEL && !me.permissions.manageAdmins) return false; // админа меняет только министр
     if (t.accessLevel > me.accessLevel) return false;
     if (t.accessLevel < MIN_PANEL_LEVEL && !me.permissions.authorizeUsers) return false;
     return true;
@@ -59,6 +63,7 @@ export default function Admin() {
     me.permissions.authorizeUsers &&
     t.discordId !== me.discordId &&
     t.accessLevel !== TOP_LEVEL &&
+    (t.accessLevel !== ADMIN_ROLE_LEVEL || me.permissions.manageAdmins) &&
     t.accessLevel <= me.accessLevel;
 
   const handleError = (e) => setError(ERRORS[e.message] || 'Не удалось выполнить действие.');

@@ -3,6 +3,7 @@ import db from '../db.js';
 import {
   ACCESS_LEVELS,
   TOP_LEVEL,
+  ADMIN_ROLE_LEVEL,
   DEPUTY_LEVEL,
   ADVISOR_LEVEL,
   PROSECUTOR_LEVEL,
@@ -74,6 +75,7 @@ router.get('/stats', requireLevel(MIN_PANEL_LEVEL), (_req, res) => {
 
   res.json({
     staff,
+    admins: countAt(ADMIN_ROLE_LEVEL),
     deputies: countAt(DEPUTY_LEVEL),
     advisors: countAt(ADVISOR_LEVEL),
     prosecutors: countAt(PROSECUTOR_LEVEL),
@@ -131,6 +133,13 @@ router.patch('/admin/users/:id', requireLevel(ADMIN_LEVEL), (req, res) => {
     // Роль министра выдаётся только через передачу.
     if (newLevel === TOP_LEVEL || target.access_level === TOP_LEVEL) {
       return res.status(400).json({ error: 'minister_via_transfer' });
+    }
+    // Уровень «Администратор» назначает и снимает только министр.
+    if (
+      (newLevel === ADMIN_ROLE_LEVEL || target.access_level === ADMIN_ROLE_LEVEL) &&
+      !perms.manageAdmins
+    ) {
+      return res.status(403).json({ error: 'admin_via_minister' });
     }
     // Нельзя выдать уровень выше своего и нельзя трогать тех, кто выше тебя.
     if (newLevel > actor.access_level) return res.status(403).json({ error: 'above_your_level' });
@@ -191,6 +200,10 @@ router.delete('/admin/users/:id', requireLevel(DEPUTY_LEVEL), (req, res) => {
   }
   if (target.access_level === TOP_LEVEL) {
     return res.status(400).json({ error: 'cannot_delete_minister' });
+  }
+  // Администратора может удалить только министр.
+  if (target.access_level === ADMIN_ROLE_LEVEL && req.user.access_level < TOP_LEVEL) {
+    return res.status(403).json({ error: 'admin_delete_minister_only' });
   }
   if (target.access_level > req.user.access_level) {
     return res.status(403).json({ error: 'target_above_you' });

@@ -4,6 +4,7 @@ export const ASSISTANT_LEVEL = 40;
 export const PROSECUTOR_LEVEL = 50;
 export const ADVISOR_LEVEL = 80;
 export const DEPUTY_LEVEL = 90;
+export const ADMIN_ROLE_LEVEL = 95;
 export const TOP_LEVEL = 100;
 
 export const MINISTRY_NAME = 'Министерство юстиции';

@@ -22,6 +22,7 @@ export const config = {
 
 // --- Уровни доступа (числом, чем выше — тем больше прав) ---
 export const TOP_LEVEL = 100; // Министр юстиции (единственный)
+export const ADMIN_ROLE_LEVEL = 95; // Администратор (все права министра, кроме передачи роли)
 export const DEPUTY_LEVEL = 90; // Заместитель министра юстиции
 export const ADVISOR_LEVEL = 80; // Советник министра юстиции
 export const PROSECUTOR_LEVEL = 50; // Прокурор
@@ -37,6 +38,7 @@ export const ACCESS_LEVELS = {
   50: { name: 'Прокурор', short: 'Прокурор', color: '#5b8fc9' },
   80: { name: 'Советник министра юстиции', short: 'Советник', color: '#a98bd6' },
   90: { name: 'Заместитель министра юстиции', short: 'Заместитель', color: '#d99a52' },
+  95: { name: 'Администратор', short: 'Администратор', color: '#d98cc4' },
   100: { name: 'Министр юстиции', short: 'Министр', color: '#e8c660' },
 };
 
@@ -48,6 +50,7 @@ export function permissionsFor(level) {
     authorizeUsers: level >= DEPUTY_LEVEL, // министр, заместитель (выдача/снятие доступа)
     changeNames: level >= DEPUTY_LEVEL, // министр, заместитель
     transferMinister: level >= TOP_LEVEL, // только министр
+    manageAdmins: level >= TOP_LEVEL, // только министр — выдача/снятие уровня «Администратор»
     seePending: level >= ADVISOR_LEVEL, // министр, заместитель, советник
     manageDocs: level >= DEPUTY_LEVEL, // министр, заместитель — категории и документы
     viewGeneral: level >= ADVISOR_LEVEL, // министр, заместитель, советник — Ген. прокуратура
