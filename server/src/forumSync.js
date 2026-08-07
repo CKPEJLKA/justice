@@ -7,6 +7,54 @@ const RSS_URL =
 const INTERVAL_MIN = Number(process.env.FORUM_SYNC_INTERVAL_MIN) || 5;
 const DISABLED = process.env.FORUM_SYNC_DISABLED === '1';
 
+// FlareSolverr для обхода Cloudflare-проверки форума. Если не задан — прямой fetch (в dev).
+const FLARE_URL = process.env.FLARESOLVERR_URL || '';
+
+async function flareRequest(url) {
+  const res = await fetch(FLARE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cmd: 'request.get', url, maxTimeout: 60000 }),
+  });
+  if (!res.ok) throw new Error(`flaresolverr HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.status !== 'ok') throw new Error(`flaresolverr: ${data.message || data.status}`);
+  return data.solution?.response || '';
+}
+
+function decodeEntities(s) {
+  return String(s)
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+// XML ленты: через FlareSolverr (браузер заворачивает XML в <pre> с энтити) или напрямую.
+async function getRssXml() {
+  if (FLARE_URL) {
+    const html = await flareRequest(RSS_URL);
+    const m = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+    return decodeEntities(m ? m[1] : html);
+  }
+  const res = await fetch(RSS_URL, { headers: { 'User-Agent': 'JusticeBot/1.0' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+}
+
+// HTML страницы темы: через FlareSolverr или напрямую.
+async function getThreadHtml(url) {
+  try {
+    if (FLARE_URL) return await flareRequest(url);
+    const res = await fetch(url, { headers: { 'User-Agent': 'JusticeBot/1.0' } });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
 function decode(s) {
   return String(s || '')
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
@@ -84,15 +132,10 @@ const isStub = (c) => !c || /Читать далее|Read more/i.test(c);
 
 // Загружает полный текст обращения со страницы темы форума.
 async function fetchThreadContent(url) {
-  try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'JusticeBot/1.0' } });
-    if (!res.ok) return null;
-    const html = await res.text();
-    const inner = extractFirstPost(html);
-    return inner ? sanitizeHtml(inner) : null;
-  } catch {
-    return null;
-  }
+  const html = await getThreadHtml(url);
+  if (!html) return null;
+  const inner = extractFirstPost(html);
+  return inner ? sanitizeHtml(inner) : null;
 }
 
 // Из заголовка «Обращение №CP-185» достаём код «CP-185».
@@ -104,9 +147,7 @@ function extractCode(title) {
 export async function syncForumAppeals() {
   let xml;
   try {
-    const res = await fetch(RSS_URL, { headers: { 'User-Agent': 'JusticeBot/1.0' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    xml = await res.text();
+    xml = await getRssXml();
   } catch (e) {
     console.warn('[forum-sync] не удалось получить RSS:', e.message);
     return { created: 0 };
