@@ -78,8 +78,8 @@ exports.handler = async (event) => {
   const body = {
     embeds: [
       {
-        title: '📨 Назначение на обращение',
-        description: `Назначен ответственный по обращению **${appealTitle}**.`,
+        title: '📨 Напоминание об обращении',
+        description: `Требуется движение по обращению **${appealTitle}**.`,
         color: 0xe8c660,
         fields,
         footer: { text: 'Министерство юстиции штата Senora' },
