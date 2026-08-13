@@ -149,8 +149,8 @@ router.patch('/admin/users/:id', requireLevel(ADMIN_LEVEL), (req, res) => {
     ) {
       return res.status(403).json({ error: 'admin_via_minister' });
     }
-    // Нельзя выдать уровень выше своего и нельзя трогать тех, кто выше тебя.
-    if (newLevel > actor.access_level) return res.status(403).json({ error: 'above_your_level' });
+    // Нельзя выдать уровень равный своему или выше, и нельзя трогать тех, кто выше тебя.
+    if (newLevel >= actor.access_level) return res.status(403).json({ error: 'above_your_level' });
     if (target.access_level > actor.access_level) return res.status(403).json({ error: 'target_above_you' });
     // Выдача/снятие доступа (через порог сотрудника) требует права authorizeUsers.
     const crossesAccess =

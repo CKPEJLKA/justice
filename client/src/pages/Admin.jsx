@@ -8,7 +8,7 @@ const ERRORS = {
   no_authorize_permission: 'У вас нет права выдавать или снимать доступ пользователям.',
   no_role_permission: 'У вас нет права изменять роли.',
   no_name_permission: 'У вас нет права изменять имена.',
-  above_your_level: 'Нельзя выдать уровень выше вашего собственного.',
+  above_your_level: 'Нельзя выдать уровень, равный вашему собственному или выше.',
   target_above_you: 'Нельзя изменять пользователя с уровнем выше вашего.',
   minister_via_transfer: 'Роль министра меняется только через передачу роли.',
   admin_via_minister: 'Назначать и снимать Администраторов может только министр.',
@@ -43,7 +43,7 @@ export default function Admin() {
     .filter(
       (l) =>
         l.value !== TOP_LEVEL &&
-        l.value <= me.accessLevel &&
+        l.value < me.accessLevel &&
         (l.value !== ADMIN_ROLE_LEVEL || me.permissions.manageAdmins) &&
         (l.value >= MIN_PANEL_LEVEL || me.permissions.authorizeUsers),
     )
@@ -58,9 +58,9 @@ export default function Admin() {
     return true;
   };
 
-  // Полное удаление из базы — только при праве authorizeUsers (министр/заместитель).
+  // Полное удаление из базы — только при праве deleteUsers (министр/заместитель).
   const canDelete = (t) =>
-    me.permissions.authorizeUsers &&
+    me.permissions.deleteUsers &&
     t.discordId !== me.discordId &&
     t.accessLevel !== TOP_LEVEL &&
     (t.accessLevel !== ADMIN_ROLE_LEVEL || me.permissions.manageAdmins) &&
@@ -147,7 +147,7 @@ export default function Admin() {
                 <th>Пользователь</th>
                 <th>Discord ID</th>
                 <th>Уровень доступа</th>
-                {me.permissions.authorizeUsers && <th>Действия</th>}
+                {me.permissions.deleteUsers && <th>Действия</th>}
               </tr>
             </thead>
             <tbody>
@@ -224,7 +224,7 @@ export default function Admin() {
                       </span>
                     )}
                   </td>
-                  {me.permissions.authorizeUsers && (
+                  {me.permissions.deleteUsers && (
                     <td>
                       {canDelete(u) && (
                         <button

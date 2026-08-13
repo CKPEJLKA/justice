@@ -47,7 +47,8 @@ export function permissionsFor(level) {
   return {
     accessAdmin: level >= ADMIN_LEVEL, // министр, заместитель, советник
     changeRoles: level >= ADVISOR_LEVEL, // министр, заместитель, советник
-    authorizeUsers: level >= DEPUTY_LEVEL, // министр, заместитель (выдача/снятие доступа)
+    authorizeUsers: level >= ADVISOR_LEVEL, // министр, заместитель, советник (выдача/снятие доступа)
+    deleteUsers: level >= DEPUTY_LEVEL, // министр, заместитель — полное удаление из базы
     changeNames: level >= DEPUTY_LEVEL, // министр, заместитель
     transferMinister: level >= TOP_LEVEL, // только министр
     manageAdmins: level >= TOP_LEVEL, // только министр — выдача/снятие уровня «Администратор»
