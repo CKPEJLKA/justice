@@ -83,3 +83,19 @@ export const APPEAL_STATUSES = {
   reviewed: { label: 'Рассмотрено', color: '#6cc18e', inProgress: false },
 };
 export const APPEAL_STATUS_ORDER = ['not_taken', 'assigned', 'reviewing', 'refused', 'reviewed'];
+
+// Виды обращений по префиксу номера (CP-123, AP-15, PR-7). У каждого — своя вкладка.
+// noun — как называть тему при импорте («Обращение CP-123», «Обжалование AP-15»).
+export const APPEAL_KINDS = {
+  CP: { tab: 'Обращения CP', noun: 'Обращение' },
+  AP: { tab: 'Обжалования AP', noun: 'Обжалование' },
+  PR: { tab: 'Обжалования PR', noun: 'Обжалование' },
+};
+export const APPEAL_KIND_ORDER = ['CP', 'AP', 'PR'];
+export const DEFAULT_APPEAL_KIND = 'CP';
+
+// Вид обращения по коду: «AP-15» → AP. Без кода или с неизвестным префиксом — CP.
+export function appealKindOf(code) {
+  const prefix = String(code || '').split('-')[0].toUpperCase();
+  return APPEAL_KINDS[prefix] ? prefix : DEFAULT_APPEAL_KIND;
+}

@@ -1,5 +1,6 @@
 import db from './db.js';
 import { getSettings } from './siteSettings.js';
+import { APPEAL_KINDS, appealKindOf } from './config.js';
 import { logAudit } from './audit.js';
 
 // Импорт обращений с игрового форума (XenForo).
@@ -245,13 +246,19 @@ async function fetchThreadContent(url, cookie) {
   return inner ? sanitizeHtml(inner) : null;
 }
 
-// Номер обращения из заголовка: «Обращение №CP-185» → «CP-185».
-// Понимает и опечатки без префикса: «Обращение №-6391», «№ 6391».
-// Темы без номера (закреплённая «Форма подачи…» и т.п.) — не обращения.
+// Кириллические буквы, неотличимые от латинских: «СР-12» и «АР-15», набранные по-русски.
+const HOMOGLYPHS = { А: 'A', а: 'a', С: 'C', с: 'c', Р: 'P', р: 'p' };
+
+// Номер обращения из заголовка: «Обращение №CP-185» → «CP-185», «Обжалование №AP-15» → «AP-15».
+// Префиксы: CP (обращения), AP и PR (обжалования); берётся первый найденный.
+// Опечатка без префикса («Обращение №-6391», «№ 6391») считается CP.
+// Темы без номера (закреплённая «Форма подачи…» и т.п.) — не обращения: null.
 export function extractCode(title) {
-  const s = String(title);
-  const m = s.match(/CP\s*[-–—№#]*\s*(\d+)/i) || s.match(/№\s*[-–—#]?\s*(\d+)/);
-  return m ? `CP-${m[1]}` : null;
+  const s = String(title).replace(/[АаСсРр]/g, (ch) => HOMOGLYPHS[ch]);
+  const m = s.match(/(?:^|[^A-Za-zА-Яа-яЁё])(CP|AP|PR)\s*[-–—№#]*\s*(\d+)/i);
+  if (m) return `${m[1].toUpperCase()}-${m[2]}`;
+  const n = s.match(/№\s*[-–—#]?\s*(\d+)/);
+  return n ? `CP-${n[1]}` : null;
 }
 
 // --- Состояние импорта (для индикатора «Форум недоступен») ---
@@ -330,7 +337,8 @@ async function runSync() {
     if (byCode.get(code)) continue; // уже добавлено вручную
     // Полный текст берём со страницы темы; RSS — запасной (обрезанный) вариант.
     const content = (await fetchThreadContent(it.link, cookie)) || it.content || null;
-    insert.run(code, `Обращение ${code}`, it.link, tid, it.title, content, it.creator || null);
+    const noun = APPEAL_KINDS[appealKindOf(code)].noun; // «Обращение CP-…» / «Обжалование AP-…»
+    insert.run(code, `${noun} ${code}`, it.link, tid, it.title, content, it.creator || null);
     created += 1;
   }
   // Догружаем полный текст для ранее импортированных обращений без него —

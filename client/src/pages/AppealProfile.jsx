@@ -12,7 +12,10 @@ function formatDate(s) {
   return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Moscow' }).format(d);
 }
 
-const CRUMBS = [{ label: 'Обращения', to: '/appeals' }];
+// Путь назад ведёт во вкладку обращения (CP / AP / PR).
+const crumbsFor = (kind) => [
+  { label: 'Обращения', to: kind && kind !== 'CP' ? `/appeals?tab=${kind}` : '/appeals' },
+];
 
 // Строка формы «подпись слева — поле справа».
 function Row({ label, htmlFor, children }) {
@@ -132,7 +135,7 @@ export default function AppealProfile() {
   if (error && !appeal) {
     return (
       <div className="page">
-        <PageHeader title="Обращение" crumbs={CRUMBS} />
+        <PageHeader title="Обращение" crumbs={crumbsFor(appeal?.kind)} />
         <div className="card error-text">{error}</div>
       </div>
     );
@@ -140,7 +143,7 @@ export default function AppealProfile() {
   if (!appeal || !form) {
     return (
       <div className="page">
-        <PageHeader title="Обращение" crumbs={CRUMBS} />
+        <PageHeader title="Обращение" crumbs={crumbsFor(appeal?.kind)} />
         <div className="card empty-state">Загрузка…</div>
       </div>
     );
@@ -152,7 +155,7 @@ export default function AppealProfile() {
     <div className="page">
       <PageHeader
         title={appeal.title}
-        crumbs={CRUMBS}
+        crumbs={crumbsFor(appeal?.kind)}
         actions={
           <>
             {canNotify && (

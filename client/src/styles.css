@@ -641,6 +641,32 @@ h3 {
   border-right: none;
 }
 
+button.segmented-item {
+  background: none;
+  border-top: none;
+  border-bottom: none;
+  border-left: none;
+  cursor: pointer;
+}
+
+.segmented-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  background: #383c45;
+  color: var(--text);
+  font: 700 11.5px/1 var(--f-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented-item.active .segmented-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
 .segmented-item:hover {
   background: #30343b;
 }

@@ -10,9 +10,12 @@ import {
   PROSECUTOR_LEVEL,
   APPEAL_STATUSES,
   APPEAL_STATUS_ORDER,
+  APPEAL_KINDS,
+  APPEAL_KIND_ORDER,
+  appealKindOf,
   permissionsFor,
 } from '../config.js';
-import { getForumStatus } from '../forumSync.js';
+import { getForumStatus, extractCode } from '../forumSync.js';
 import { requireLevel } from '../middleware/auth.js';
 import { notifyAssignment } from '../assignNotify.js';
 import { logAudit } from '../audit.js';
@@ -60,6 +63,8 @@ function publicAppeal(a) {
   return {
     id: a.id,
     code: a.code,
+    // Вкладка: по коду, а у старых записей без кода — по номеру в названии (по умолчанию CP).
+    kind: appealKindOf(a.code || extractCode(a.title)),
     source: a.source,
     forumTitle: a.forum_title,
     forumContent: a.forum_content,
@@ -136,6 +141,11 @@ const statusLabel = (s) => APPEAL_STATUSES[s]?.label || s || '—';
 function describeAppealChanges(before, after) {
   const parts = [];
   if (before.title !== after.title) parts.push(`Название: «${before.title}» → «${after.title}»`);
+  const kindBefore = appealKindOf(before.code || extractCode(before.title));
+  const kindAfter = appealKindOf(after.code || extractCode(after.title));
+  if (kindBefore !== kindAfter) {
+    parts.push(`перенесено: ${APPEAL_KINDS[kindBefore].tab} → ${APPEAL_KINDS[kindAfter].tab}`);
+  }
   if (before.status !== after.status) {
     parts.push(`Статус: ${statusLabel(before.status)} → ${statusLabel(after.status)}`);
   }
@@ -184,13 +194,13 @@ export function appealStatsFor(uid) {
 
 // Список обращений + прокуроры + справочник статусов.
 router.get('/', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
-  // Сортировка по номеру CP (по убыванию). Обращения без кода (созданные
-  // вручную) идут после — по дате создания.
+  // Новые темы форума сверху (id темы на форуме растёт со временем — независимо от
+  // префикса CP/AP/PR и его нумерации). Добавленные вручную — после, по дате создания.
   const appeals = db
     .prepare(
       `SELECT * FROM appeals
-       ORDER BY (code IS NULL),
-                CAST(REPLACE(code, 'CP-', '') AS INTEGER) DESC,
+       ORDER BY (forum_thread_id IS NULL),
+                CAST(forum_thread_id AS INTEGER) DESC,
                 created_at DESC`,
     )
     .all()
@@ -202,6 +212,7 @@ router.get('/', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
     assignees: assigneeCandidates(),
     assistants: assistantCandidates(),
     statuses: statusList(),
+    kinds: APPEAL_KIND_ORDER.map((key) => ({ key, ...APPEAL_KINDS[key] })),
     // Состояние импорта с форума — только советникам и выше.
     ...(permissionsFor(req.user.access_level, req.user.isSuperuser).viewForumStatus
       ? { forumStatus: getForumStatus() }
@@ -253,10 +264,11 @@ router.post('/', requireManage, (req, res) => {
 
   const info = db
     .prepare(
-      `INSERT INTO appeals (title, forum_url, applicant, status, assigned_user_id, assistant_user_id, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO appeals (code, title, forum_url, applicant, status, assigned_user_id, assistant_user_id, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(title, forumUrl, applicant, status, assignedUserId, assistantUserId, note);
+    // Номер (и вкладка CP/AP/PR) — из названия, если он там есть.
+    .run(extractCode(title), title, forumUrl, applicant, status, assignedUserId, assistantUserId, note);
   if (ARCHIVABLE_STATUSES.has(status)) {
     db.prepare("UPDATE appeals SET reviewed_at = datetime('now') WHERE id = ?").run(info.lastInsertRowid);
   }
@@ -299,6 +311,13 @@ router.patch('/:id', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
     if (!t) return res.status(400).json({ error: 'empty_title' });
     updates.push('title = ?');
     params.push(t);
+    // Переименовали, например, «Обращение №-6391» в «Обжалование AP-6391» — обновляем номер,
+    // и обращение переходит во вкладку своего префикса. Нет номера в новом названии — номер прежний.
+    const newCode = extractCode(t);
+    if (newCode && newCode !== a.code) {
+      updates.push('code = ?');
+      params.push(newCode);
+    }
   }
   if (req.body.forumUrl !== undefined) {
     updates.push('forum_url = ?');

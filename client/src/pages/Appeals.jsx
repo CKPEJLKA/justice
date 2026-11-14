@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { useSite } from '../context/SiteContext.jsx';
@@ -133,8 +133,9 @@ export default function Appeals() {
   const { appealsForumUrl } = useSite();
   const navigate = useNavigate();
   const canManage = !!user.permissions?.manageAppeals;
+  const [params, setParams] = useSearchParams();
 
-  const [data, setData] = useState(null); // { appeals, prosecutors, statuses }
+  const [data, setData] = useState(null); // { appeals, prosecutors, statuses, kinds }
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState(null); // id прокурора, чей список раскрыт
   const [showArchive, setShowArchive] = useState(false);
@@ -191,9 +192,19 @@ export default function Appeals() {
   if (error) return <div className="page">{header}<div className="card error-text">{error}</div></div>;
   if (!data) return <div className="page">{header}<div className="card empty-state">Загрузка…</div></div>;
 
-  const { appeals, archived = [], prosecutors, assignees, assistants, statuses } = data;
+  const { appeals: allAppeals, archived: allArchived = [], prosecutors, assignees, assistants, statuses } = data;
+  const kinds = data.kinds?.length ? data.kinds : [{ key: 'CP', tab: 'Обращения CP' }];
+  // Вкладка из адреса (?tab=AP), по умолчанию — первая (CP).
+  const kind = kinds.some((k) => k.key === params.get('tab')) ? params.get('tab') : kinds[0].key;
+  const kindInfo = kinds.find((k) => k.key === kind);
+  const appeals = allAppeals.filter((a) => a.kind === kind);
+  const archived = allArchived.filter((a) => a.kind === kind);
+  const countOf = (key) => allAppeals.filter((a) => a.kind === key).length;
+  const setKind = (key) => setParams(key === kinds[0].key ? {} : { tab: key }, { replace: true });
+
+  // «В работе у сотрудников» — по всем вкладкам сразу.
   const inProgressOf = (pid) =>
-    appeals.filter((a) => (a.assignedUser?.id === pid || a.assistant?.id === pid) && a.inProgress);
+    allAppeals.filter((a) => (a.assignedUser?.id === pid || a.assistant?.id === pid) && a.inProgress);
 
   return (
     <div className="page">
@@ -253,20 +264,38 @@ export default function Appeals() {
         </div>
       </section>
 
-      {/* Актуальные обращения */}
+      {/* Вкладки по префиксу номера: CP / AP / PR */}
+      <nav className="segmented" aria-label="Виды обращений">
+        {kinds.map((k) => (
+          <button
+            key={k.key}
+            type="button"
+            className={'segmented-item' + (k.key === kind ? ' active' : '')}
+            aria-pressed={k.key === kind}
+            onClick={() => setKind(k.key)}
+          >
+            {k.tab}
+            <span className="segmented-count">{countOf(k.key)}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* Актуальные обращения выбранной вкладки */}
       <section className="panel">
         <div className="panel-head">
-          <h2 className="panel-title">Актуальные обращения</h2>
+          <h2 className="panel-title">{kindInfo.tab}</h2>
           <span className="count-pill">{appeals.length}</span>
         </div>
         {appeals.length === 0 ? (
-          <div className="card empty-state" style={{ border: 'none' }}>Актуальных обращений нет.</div>
+          <div className="card empty-state" style={{ border: 'none' }}>
+            {kind === 'CP' ? 'Актуальных обращений нет.' : 'Актуальных обжалований нет.'}
+          </div>
         ) : (
           <AppealsTable rows={appeals} />
         )}
       </section>
 
-      {/* Архив: «Рассмотрено» и «Отказано» дольше 24 часов */}
+      {/* Архив вкладки: «Рассмотрено» и «Отказано» дольше 24 часов */}
       {archived.length > 0 && (
         <section className="panel">
           <button
@@ -293,7 +322,11 @@ export default function Appeals() {
 
             <label className="modal-label">Тема</label>
             <input className="name-input modal-select" autoFocus value={draft.title}
+              placeholder={kind === 'CP' ? 'Обращение CP-6543' : `Обжалование ${kind}-15`}
               onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+            <div className="form-hint">
+              Вкладка определяется по номеру в теме: CP, AP или PR. Без номера обращение попадёт в CP.
+            </div>
 
             <label className="modal-label" style={{ marginTop: 12 }}>Ссылка на тему форума</label>
             <input className="name-input modal-select" placeholder="https://forum.gta5rp.com/threads/..."
