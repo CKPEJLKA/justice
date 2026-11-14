@@ -845,6 +845,31 @@ button.segmented-item {
   color: var(--brass);
 }
 
+/* Статус, который можно сменить из таблицы: выглядит как метка, внутри — список статусов */
+select.status-select {
+  appearance: none;
+  -webkit-appearance: none;
+  field-sizing: content; /* ширина по выбранному статусу, а не по самому длинному */
+  border-radius: 0;
+  cursor: pointer;
+}
+
+select.status-select:hover:not(:disabled) {
+  border-color: currentColor;
+}
+
+select.status-select:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+/* Пункты списка — обычным цветом текста, а не цветом текущего статуса */
+select.status-select option {
+  color: var(--text);
+  background: var(--panel);
+  font-weight: 400;
+}
+
 /* ==========================================================================
    Аватары
    ========================================================================== */

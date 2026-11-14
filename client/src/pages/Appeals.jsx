@@ -15,7 +15,31 @@ function StatusBadge({ label, color }) {
   );
 }
 
-function AppealsTable({ rows }) {
+// Статус, который можно сменить прямо в таблице. Выглядит как обычная метка статуса,
+// по нажатию открывается список статусов.
+function StatusPicker({ appeal, statuses, busy, onChange }) {
+  return (
+    <select
+      className="level-badge status-select"
+      style={{ color: appeal.statusColor }}
+      value={appeal.status}
+      disabled={busy}
+      title="Нажмите, чтобы сменить статус"
+      aria-label={`Статус обращения ${appeal.title}`}
+      onChange={(e) => onChange(appeal, e.target.value)}
+    >
+      {statuses.map((s) => (
+        <option key={s.key} value={s.key}>
+          {s.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// canEditStatus(a) — может ли пользователь менять статус этого обращения
+// (руководство — любого, прокурор — только своего).
+function AppealsTable({ rows, statuses, canEditStatus, onStatusChange, busyId }) {
   return (
     <div className="table-wrap">
     <table className="data-table">
@@ -34,7 +58,13 @@ function AppealsTable({ rows }) {
               <Link to={`/appeals/${a.id}`} className="appeal-title-link">{a.title}</Link>
               {a.applicant && <div className="employee-tag">Заявитель: {a.applicant}</div>}
             </td>
-            <td><StatusBadge label={a.statusLabel} color={a.statusColor} /></td>
+            <td>
+              {canEditStatus(a) ? (
+                <StatusPicker appeal={a} statuses={statuses} busy={busyId === a.id} onChange={onStatusChange} />
+              ) : (
+                <StatusBadge label={a.statusLabel} color={a.statusColor} />
+              )}
+            </td>
             <td>
               {a.assignedUser ? (
                 <div className="cell-user">
@@ -140,6 +170,25 @@ export default function Appeals() {
   const [expanded, setExpanded] = useState(null); // id прокурора, чей список раскрыт
   const [showArchive, setShowArchive] = useState(false);
   const [modal, setModal] = useState(false);
+  const [statusBusyId, setStatusBusyId] = useState(null); // обращение, у которого сейчас сохраняется статус
+
+  // Статус прямо из таблицы: руководство — у любого обращения, прокурор — у своего
+  // (так же проверяет сервер).
+  const canEditStatus = (a) => canManage || (a.assignedUser && a.assignedUser.id === user.id);
+
+  const changeStatus = async (appeal, status) => {
+    if (status === appeal.status) return;
+    setStatusBusyId(appeal.id);
+    try {
+      const { appeal: updated } = await api.updateAppeal(appeal.id, { status });
+      const swap = (list) => list.map((x) => (x.id === updated.id ? updated : x));
+      setData((d) => ({ ...d, appeals: swap(d.appeals), archived: swap(d.archived || []) }));
+    } catch {
+      alert(`Не удалось сменить статус обращения «${appeal.title}».`);
+    } finally {
+      setStatusBusyId(null);
+    }
+  };
   const [draft, setDraft] = useState({
     title: '', forumUrl: '', applicant: '', status: 'not_taken', assignedUserId: '', assistantUserId: '',
   });
@@ -201,6 +250,7 @@ export default function Appeals() {
   const archived = allArchived.filter((a) => a.kind === kind);
   const countOf = (key) => allAppeals.filter((a) => a.kind === key).length;
   const setKind = (key) => setParams(key === kinds[0].key ? {} : { tab: key }, { replace: true });
+  const tableProps = { statuses, canEditStatus, onStatusChange: changeStatus, busyId: statusBusyId };
 
   // «В работе у сотрудников» — по всем вкладкам сразу.
   const inProgressOf = (pid) =>
@@ -291,7 +341,7 @@ export default function Appeals() {
             {kind === 'CP' ? 'Актуальных обращений нет.' : 'Актуальных обжалований нет.'}
           </div>
         ) : (
-          <AppealsTable rows={appeals} />
+          <AppealsTable rows={appeals} {...tableProps} />
         )}
       </section>
 
@@ -310,7 +360,7 @@ export default function Appeals() {
               {showArchive ? 'Свернуть' : 'Показать'} <Icon name={showArchive ? 'collapse' : 'expand'} />
             </span>
           </button>
-          {showArchive && <AppealsTable rows={archived} />}
+          {showArchive && <AppealsTable rows={archived} {...tableProps} />}
         </section>
       )}
 
