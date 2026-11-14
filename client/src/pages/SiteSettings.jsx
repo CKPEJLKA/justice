@@ -59,6 +59,16 @@ function ForumCheckResult({ r }) {
               RSS-лента доступна: тем <b>{r.itemCount}</b>, распознано обращений <b>{r.recognized}</b>
             </span>
           </div>
+          {r.threadText !== null && (
+            <div className="forum-check-line">
+              {r.threadText ? <Ok /> : <Fail />}
+              <span>
+                {r.threadText
+                  ? 'Полный текст обращений загружается'
+                  : 'Страница темы не открылась: в обращениях будет только обрезанный текст из ленты'}
+              </span>
+            </div>
+          )}
           {r.sample.length > 0 && (
             <ul className="forum-check-sample">
               {r.sample.map((s, i) => (
@@ -76,6 +86,11 @@ function ForumCheckResult({ r }) {
             {CHECK_REASONS[r.reason] || 'Нет доступа к ленте.'}
             {r.message && <span className="forum-check-detail"> ({r.message})</span>}
           </span>
+        </div>
+      )}
+      {r.via && (
+        <div className="forum-check-detail">
+          Запросы к форуму идут {r.via === 'flare' ? 'через FlareSolverr (Cloudflare требует проверку)' : 'напрямую'}.
         </div>
       )}
     </div>

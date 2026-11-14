@@ -23,50 +23,91 @@ class ForumError extends Error {
   }
 }
 
-// «a=1; b=2» → [{ name, value }] для FlareSolverr.
-function parseCookie(str) {
+// Родительский домен для cookie: forum.gta5rp.com → .gta5rp.com
+function cookieDomain(url) {
+  const host = new URL(url).hostname;
+  const parts = host.split('.');
+  return parts.length > 2 ? `.${parts.slice(1).join('.')}` : host;
+}
+
+// «a=1; b=2» → [{ name, value, domain, path }] для FlareSolverr.
+// Домен ставим явно на весь сайт (.gta5rp.com): FlareSolverr сначала открывает страницу
+// без cookie, а форум уводит гостя со страниц на gta5rp.com/login-forum — без явного домена
+// cookie попали бы на gta5rp.com, и повторная загрузка форума шла бы без авторизации.
+function parseCookie(str, url) {
+  const domain = cookieDomain(url);
   return String(str || '')
     .split(';')
     .map((p) => p.trim())
     .filter((p) => p.includes('='))
     .map((p) => {
       const i = p.indexOf('=');
-      return { name: p.slice(0, i).trim(), value: p.slice(i + 1).trim() };
+      return { name: p.slice(0, i).trim(), value: p.slice(i + 1).trim(), domain, path: '/' };
     })
     .filter((c) => c.name);
 }
 
-// GET страницы форума: через FlareSolverr или напрямую. Возвращает { status, url, body }.
-async function forumGet(url, cookie) {
-  if (FLARE_URL) {
-    let res;
-    try {
-      res = await fetch(FLARE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cmd: 'request.get',
-          url,
-          maxTimeout: 60000,
-          ...(cookie ? { cookies: parseCookie(cookie) } : {}),
-        }),
-        signal: AbortSignal.timeout(90000),
-      });
-    } catch (e) {
-      throw new ForumError('network', `FlareSolverr недоступен: ${e.message}`);
-    }
-    if (!res.ok) throw new ForumError('network', `FlareSolverr HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.status !== 'ok') throw new ForumError('network', `FlareSolverr: ${data.message || data.status}`);
-    const s = data.solution || {};
-    return { status: s.status || 200, url: s.url || url, body: s.response || '' };
-  }
+// Ответ — проверка Cloudflare («Just a moment…»), а не страница форума?
+function isCloudflareChallenge(status, headers, body) {
+  if (status !== 403 && status !== 503 && status !== 429) return false;
+  if (String(headers.get?.('cf-mitigated') || '').toLowerCase() === 'challenge') return true;
+  return /<title>\s*Just a moment|_cf_chl_opt|cf-chl-|challenges\.cloudflare\.com/i.test(body);
+}
+
+// Если Cloudflare недавно требовал проверку — какое-то время сразу идём через FlareSolverr.
+const CF_STICKY_MS = 30 * 60 * 1000;
+let cfChallengedUntil = 0;
+
+async function directGet(url, cookie) {
+  const headers = {
+    'User-Agent': UA,
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
+  };
+  if (cookie) headers.Cookie = cookie;
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
+  const body = await res.text();
+  return { status: res.status, url: res.url || url, body, headers: res.headers, via: 'direct' };
+}
+
+async function flareGet(url, cookie) {
+  let res;
   try {
-    const headers = { 'User-Agent': UA };
-    if (cookie) headers.Cookie = cookie;
-    const res = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
-    return { status: res.status, url: res.url || url, body: await res.text() };
+    res = await fetch(FLARE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cmd: 'request.get',
+        url,
+        maxTimeout: 60000,
+        ...(cookie ? { cookies: parseCookie(cookie, url) } : {}),
+      }),
+      signal: AbortSignal.timeout(90000),
+    });
   } catch (e) {
+    throw new ForumError('network', `FlareSolverr недоступен: ${e.message}`);
+  }
+  if (!res.ok) throw new ForumError('network', `FlareSolverr HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.status !== 'ok') throw new ForumError('network', `FlareSolverr: ${data.message || data.status}`);
+  const s = data.solution || {};
+  return { status: s.status || 200, url: s.url || url, body: s.response || '', via: 'flare' };
+}
+
+// GET страницы форума. Возвращает { status, url, body, via: 'direct' | 'flare' }.
+// Сначала прямой запрос (cookie передаётся точно как есть); FlareSolverr — только если
+// Cloudflare требует проверку браузером, либо прямой запрос не прошёл по сети.
+async function forumGet(url, cookie) {
+  if (FLARE_URL && Date.now() < cfChallengedUntil) return flareGet(url, cookie);
+  try {
+    const r = await directGet(url, cookie);
+    if (FLARE_URL && isCloudflareChallenge(r.status, r.headers, r.body)) {
+      cfChallengedUntil = Date.now() + CF_STICKY_MS;
+      return flareGet(url, cookie);
+    }
+    return r;
+  } catch (e) {
+    if (FLARE_URL) return flareGet(url, cookie);
     throw new ForumError('network', `Форум недоступен: ${e.message}`);
   }
 }
@@ -94,7 +135,7 @@ function decodeEntities(s) {
 async function getRssXml({ forumUrl, cookie }) {
   const r = await forumGet(`${forumUrl}index.rss`, cookie);
   let xml = r.body;
-  if (FLARE_URL && !/<rss[\s>]/i.test(xml)) {
+  if (r.via === 'flare' && !/<rss[\s>]/i.test(xml)) {
     const m = xml.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
     if (m) xml = decodeEntities(m[1]);
   }
@@ -320,12 +361,24 @@ async function runSync() {
 // Проверка доступа для кнопки «Проверить доступ к форуму» (значения можно передать
 // несохранённые — из формы). Ничего не записывает в базу.
 export async function checkForumAccess({ forumUrl, cookie }) {
-  const result = { ok: false, loggedIn: false, username: null, itemCount: 0, recognized: 0, sample: [], reason: null, message: null };
+  const result = {
+    ok: false,
+    loggedIn: false,
+    username: null,
+    via: null, // 'direct' | 'flare' — как реально идут запросы к форуму
+    itemCount: 0,
+    recognized: 0,
+    threadText: null, // открывается ли полный текст темы (нужно импорту)
+    sample: [],
+    reason: null,
+    message: null,
+  };
 
   // Параллельно: страница раздела (вошли ли и под каким ником) и RSS-лента (то, что читает импорт).
   const [page, rss] = await Promise.allSettled([forumGet(forumUrl, cookie), getRssXml({ forumUrl, cookie })]);
 
   if (page.status === 'fulfilled') {
+    result.via = page.value.via;
     result.loggedIn = /data-logged-in="true"/i.test(page.value.body);
     const nick = page.value.body.match(/p-navgroup-link--user[^>]*\stitle="([^"]+)"/i);
     if (nick) result.username = decodeEntities(nick[1]);
@@ -338,6 +391,12 @@ export async function checkForumAccess({ forumUrl, cookie }) {
     result.recognized = withCode.filter((x) => x.code).length;
     result.sample = withCode.slice(0, 5);
     result.ok = true;
+    // Полный текст берётся со страницы темы — проверяем на первой теме ленты.
+    const first = items.find((it) => extractCode(it.title)) || items[0];
+    if (first) {
+      const html = await getThreadHtml(first.link, cookie);
+      result.threadText = !!(html && extractFirstPost(html));
+    }
   } else {
     result.reason = rss.reason?.reason || 'network';
     result.message = rss.reason?.message || 'Не удалось получить RSS-ленту';
