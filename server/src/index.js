@@ -14,6 +14,7 @@ import apiRouter from './routes/api.js';
 import docsRouter from './routes/docs.js';
 import personalDocsRouter from './routes/personalDocs.js';
 import appealsRouter from './routes/appeals.js';
+import auditRouter from './routes/audit.js';
 import { startForumSync } from './forumSync.js';
 
 const app = express();
@@ -54,6 +55,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/docs', docsRouter);
 app.use('/api/personal-docs', personalDocsRouter);
 app.use('/api/appeals', appealsRouter);
+app.use('/api/audit', auditRouter);
 app.use('/api', apiRouter);
 
 // Одно-портовый режим: отдаём собранный React (client/dist), если он есть.
@@ -76,7 +78,7 @@ app.listen(config.port, () => {
     console.warn('  ⚠  Discord OAuth не настроен — заполните server/.env (DISCORD_CLIENT_ID / SECRET).');
   }
   if (config.adminDiscordIds.length === 0) {
-    console.warn('  ⚠  ADMIN_DISCORD_IDS пуст — никто не получит высший уровень автоматически.');
+    console.warn('  ⚠  ADMIN_DISCORD_IDS пуст — суперпользователей нет.');
   }
   console.log('');
   startForumSync();

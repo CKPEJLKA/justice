@@ -12,6 +12,8 @@ import PersonalDocs from './pages/PersonalDocs.jsx';
 import Appeals from './pages/Appeals.jsx';
 import AppealProfile from './pages/AppealProfile.jsx';
 import Admin from './pages/Admin.jsx';
+import AuditLog from './pages/AuditLog.jsx';
+import SiteSettings from './pages/SiteSettings.jsx';
 import NoAccess from './pages/NoAccess.jsx';
 
 function FullLoader() {
@@ -31,7 +33,7 @@ function Protected({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <FullLoader />;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.accessLevel < MIN_PANEL_LEVEL) return <NoAccess />;
+  if (user.accessLevel < MIN_PANEL_LEVEL && !user.isSuperuser) return <NoAccess />;
   return children;
 }
 
@@ -78,6 +80,22 @@ export default function App() {
           element={
             <RequirePerm perm="accessAdmin">
               <Admin />
+            </RequirePerm>
+          }
+        />
+        <Route
+          path="/admin/audit"
+          element={
+            <RequirePerm perm="viewAudit">
+              <AuditLog />
+            </RequirePerm>
+          }
+        />
+        <Route
+          path="/admin/settings"
+          element={
+            <RequirePerm perm="manageSettings">
+              <SiteSettings />
             </RequirePerm>
           }
         />

@@ -132,4 +132,20 @@ db.exec(`
   );
 }
 
+// Журнал аудита действий.
+// actor_name — снимок имени на момент действия (пользователь может быть позже удалён).
+// sensitive = 1 — запись касается Администраторов: видна только министру/суперпользователю.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    actor_id   INTEGER,
+    actor_name TEXT,
+    action     TEXT NOT NULL,
+    summary    TEXT NOT NULL,
+    sensitive  INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
+`);
+
 export default db;

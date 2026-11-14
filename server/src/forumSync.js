@@ -1,25 +1,84 @@
 import db from './db.js';
+import { getSettings } from './siteSettings.js';
+import { logAudit } from './audit.js';
 
-// RSS-лента раздела «Обращения в прокуратуру» на игровом форуме (XenForo).
-const RSS_URL =
-  process.env.FORUM_APPEALS_RSS ||
-  'https://forum.gta5rp.com/forums/obraschenija-v-prokuraturu.2082/index.rss';
+// Импорт обращений с игрового форума (XenForo).
+// Раздел форума и cookie авторизации берутся из настроек сайта (админ-панель → Настройки)
+// и читаются заново на каждом прогоне. Разделы обращений закрыты для гостей,
+// поэтому запросы идут с cookie аккаунта, вошедшего на форум.
 const INTERVAL_MIN = Number(process.env.FORUM_SYNC_INTERVAL_MIN) || 5;
 const DISABLED = process.env.FORUM_SYNC_DISABLED === '1';
 
 // FlareSolverr для обхода Cloudflare-проверки форума. Если не задан — прямой fetch (в dev).
 const FLARE_URL = process.env.FLARESOLVERR_URL || '';
 
-async function flareRequest(url) {
-  const res = await fetch(FLARE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cmd: 'request.get', url, maxTimeout: 60000 }),
-  });
-  if (!res.ok) throw new Error(`flaresolverr HTTP ${res.status}`);
-  const data = await res.json();
-  if (data.status !== 'ok') throw new Error(`flaresolverr: ${data.message || data.status}`);
-  return data.solution?.response || '';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36';
+
+// Ошибка доступа к форуму с кодом причины: auth | http | network | format.
+class ForumError extends Error {
+  constructor(reason, message, httpStatus = null) {
+    super(message);
+    this.reason = reason;
+    this.httpStatus = httpStatus;
+  }
+}
+
+// «a=1; b=2» → [{ name, value }] для FlareSolverr.
+function parseCookie(str) {
+  return String(str || '')
+    .split(';')
+    .map((p) => p.trim())
+    .filter((p) => p.includes('='))
+    .map((p) => {
+      const i = p.indexOf('=');
+      return { name: p.slice(0, i).trim(), value: p.slice(i + 1).trim() };
+    })
+    .filter((c) => c.name);
+}
+
+// GET страницы форума: через FlareSolverr или напрямую. Возвращает { status, url, body }.
+async function forumGet(url, cookie) {
+  if (FLARE_URL) {
+    let res;
+    try {
+      res = await fetch(FLARE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cmd: 'request.get',
+          url,
+          maxTimeout: 60000,
+          ...(cookie ? { cookies: parseCookie(cookie) } : {}),
+        }),
+        signal: AbortSignal.timeout(90000),
+      });
+    } catch (e) {
+      throw new ForumError('network', `FlareSolverr недоступен: ${e.message}`);
+    }
+    if (!res.ok) throw new ForumError('network', `FlareSolverr HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.status !== 'ok') throw new ForumError('network', `FlareSolverr: ${data.message || data.status}`);
+    const s = data.solution || {};
+    return { status: s.status || 200, url: s.url || url, body: s.response || '' };
+  }
+  try {
+    const headers = { 'User-Agent': UA };
+    if (cookie) headers.Cookie = cookie;
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
+    return { status: res.status, url: res.url || url, body: await res.text() };
+  } catch (e) {
+    throw new ForumError('network', `Форум недоступен: ${e.message}`);
+  }
+}
+
+// Ответ — страница входа / «нужно войти на форум»?
+function looksLikeLogin(r) {
+  return (
+    r.status === 401 ||
+    r.status === 403 ||
+    /\/login/i.test(new URL(r.url, 'https://x/').pathname) ||
+    /data-logged-in="false"|data-template="login"|нужно сначала войти на форум|reason=anonymous/i.test(r.body)
+  );
 }
 
 function decodeEntities(s) {
@@ -31,25 +90,32 @@ function decodeEntities(s) {
     .replace(/&amp;/g, '&');
 }
 
-// XML ленты: через FlareSolverr (браузер заворачивает XML в <pre> с энтити) или напрямую.
-async function getRssXml() {
-  if (FLARE_URL) {
-    const html = await flareRequest(RSS_URL);
-    const m = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
-    return decodeEntities(m ? m[1] : html);
+// XML RSS-ленты раздела. FlareSolverr (браузер) заворачивает XML в <pre> с энтити.
+async function getRssXml({ forumUrl, cookie }) {
+  const r = await forumGet(`${forumUrl}index.rss`, cookie);
+  let xml = r.body;
+  if (FLARE_URL && !/<rss[\s>]/i.test(xml)) {
+    const m = xml.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+    if (m) xml = decodeEntities(m[1]);
   }
-  const res = await fetch(RSS_URL, { headers: { 'User-Agent': 'JusticeBot/1.0' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.text();
+  if (/<rss[\s>]/i.test(xml)) return xml;
+  if (looksLikeLogin(r)) {
+    throw new ForumError(
+      'auth',
+      cookie ? 'Форум требует вход: cookie устарел или недействителен' : 'Форум требует вход: cookie не задан',
+      r.status,
+    );
+  }
+  if (r.status >= 400) throw new ForumError('http', `Форум ответил HTTP ${r.status}`, r.status);
+  throw new ForumError('format', 'Ответ форума не похож на RSS-ленту', r.status);
 }
 
-// HTML страницы темы: через FlareSolverr или напрямую.
-async function getThreadHtml(url) {
+// HTML страницы темы (для полного текста). Ошибки не критичны — вернётся null.
+async function getThreadHtml(url, cookie) {
   try {
-    if (FLARE_URL) return await flareRequest(url);
-    const res = await fetch(url, { headers: { 'User-Agent': 'JusticeBot/1.0' } });
-    if (!res.ok) return null;
-    return await res.text();
+    const r = await forumGet(url, cookie);
+    if (r.status >= 400 || looksLikeLogin(r)) return null;
+    return r.body;
   } catch {
     return null;
   }
@@ -131,31 +197,68 @@ function extractFirstPost(html) {
 const isStub = (c) => !c || /Читать далее|Read more/i.test(c);
 
 // Загружает полный текст обращения со страницы темы форума.
-async function fetchThreadContent(url) {
-  const html = await getThreadHtml(url);
+async function fetchThreadContent(url, cookie) {
+  const html = await getThreadHtml(url, cookie);
   if (!html) return null;
   const inner = extractFirstPost(html);
   return inner ? sanitizeHtml(inner) : null;
 }
 
-// Из заголовка «Обращение №CP-185» достаём код «CP-185».
-function extractCode(title) {
-  const m = String(title).match(/CP[-\s№]*(\d+)/i);
+// Номер обращения из заголовка: «Обращение №CP-185» → «CP-185».
+// Понимает и опечатки без префикса: «Обращение №-6391», «№ 6391».
+// Темы без номера (закреплённая «Форма подачи…» и т.п.) — не обращения.
+export function extractCode(title) {
+  const s = String(title);
+  const m = s.match(/CP\s*[-–—№#]*\s*(\d+)/i) || s.match(/№\s*[-–—#]?\s*(\d+)/);
   return m ? `CP-${m[1]}` : null;
 }
 
+// --- Состояние импорта (для индикатора «Форум недоступен») ---
+let status = { state: 'unknown', checkedAt: null, lastOkAt: null, reason: null, message: null, httpStatus: null };
+export const getForumStatus = () => ({ ...status });
+
+function setStatus(next) {
+  const prev = status.state;
+  status = { ...status, ...next, checkedAt: new Date().toISOString() };
+  if (next.state === 'ok') status.lastOkAt = status.checkedAt;
+  // В журнал пишем только смену состояния, а не каждый прогон.
+  if (prev !== next.state && next.state === 'error') {
+    console.warn(`[forum-sync] нет доступа к форуму: ${next.message}`);
+    logAudit(null, 'forum.error', `Импорт обращений остановлен: ${next.message}`);
+  } else if (prev === 'error' && next.state === 'ok') {
+    console.log('[forum-sync] доступ к форуму восстановлен');
+    logAudit(null, 'forum.ok', 'Доступ к форуму восстановлен, импорт обращений возобновлён');
+  }
+}
+
+let running = false;
+
 export async function syncForumAppeals() {
+  if (running) return { skipped: true };
+  running = true;
+  try {
+    return await runSync();
+  } finally {
+    running = false;
+  }
+}
+
+async function runSync() {
+  const { appealsForumUrl: forumUrl, forumCookie: cookie } = getSettings();
   let xml;
   try {
-    xml = await getRssXml();
+    xml = await getRssXml({ forumUrl, cookie });
   } catch (e) {
-    console.warn('[forum-sync] не удалось получить RSS:', e.message);
-    return { created: 0 };
+    setStatus({ state: 'error', reason: e.reason || 'network', message: e.message, httpStatus: e.httpStatus ?? null });
+    return { created: 0, error: e.message };
   }
+  setStatus({ state: 'ok', reason: null, message: null, httpStatus: null });
 
   const items = parseItems(xml);
   const byThread = db.prepare('SELECT id, forum_content FROM appeals WHERE forum_thread_id = ?');
-  const byCode = db.prepare('SELECT 1 FROM appeals WHERE code = ?');
+  // Дубль по номеру проверяем только среди добавленных вручную: темы форума уникальны по id темы,
+  // а номера разных игровых серверов могут совпадать.
+  const byCode = db.prepare("SELECT 1 FROM appeals WHERE code = ? AND source = 'manual'");
   const insert = db.prepare(
     `INSERT INTO appeals (code, title, forum_url, forum_thread_id, forum_title, forum_content, applicant, status, source)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'not_taken', 'forum')`,
@@ -172,7 +275,7 @@ export async function syncForumAppeals() {
     if (existing) {
       // Уже импортировано — заменяем «огрызок» полным текстом со страницы темы.
       if (isStub(existing.forum_content)) {
-        const content = await fetchThreadContent(it.link);
+        const content = await fetchThreadContent(it.link, cookie);
         if (content) {
           fillContent.run(content, existing.id);
           filled += 1;
@@ -182,11 +285,11 @@ export async function syncForumAppeals() {
     }
 
     const code = extractCode(it.title);
-    if (code && byCode.get(code)) continue; // уже есть (например, добавлено вручную)
-    const title = code ? `Обращение ${code}` : it.title;
+    if (!code) continue; // не обращение (закреплённая инструкция и т.п.)
+    if (byCode.get(code)) continue; // уже добавлено вручную
     // Полный текст берём со страницы темы; RSS — запасной (обрезанный) вариант.
-    const content = (await fetchThreadContent(it.link)) || it.content || null;
-    insert.run(code, title, it.link, tid, it.title, content, it.creator || null);
+    const content = (await fetchThreadContent(it.link, cookie)) || it.content || null;
+    insert.run(code, `Обращение ${code}`, it.link, tid, it.title, content, it.creator || null);
     created += 1;
   }
   // Догружаем полный текст для ранее импортированных обращений без него —
@@ -201,7 +304,7 @@ export async function syncForumAppeals() {
     )
     .all();
   for (const a of missing) {
-    const content = await fetchThreadContent(a.forum_url);
+    const content = await fetchThreadContent(a.forum_url, cookie);
     if (content) {
       fillContent.run(content, a.id);
       filled += 1;
@@ -212,6 +315,40 @@ export async function syncForumAppeals() {
     console.log(`[forum-sync] новых: ${created}, дополнено текстом: ${filled}`);
   }
   return { created, filled };
+}
+
+// Проверка доступа для кнопки «Проверить доступ к форуму» (значения можно передать
+// несохранённые — из формы). Ничего не записывает в базу.
+export async function checkForumAccess({ forumUrl, cookie }) {
+  const result = { ok: false, loggedIn: false, username: null, itemCount: 0, recognized: 0, sample: [], reason: null, message: null };
+
+  // Параллельно: страница раздела (вошли ли и под каким ником) и RSS-лента (то, что читает импорт).
+  const [page, rss] = await Promise.allSettled([forumGet(forumUrl, cookie), getRssXml({ forumUrl, cookie })]);
+
+  if (page.status === 'fulfilled') {
+    result.loggedIn = /data-logged-in="true"/i.test(page.value.body);
+    const nick = page.value.body.match(/p-navgroup-link--user[^>]*\stitle="([^"]+)"/i);
+    if (nick) result.username = decodeEntities(nick[1]);
+  }
+
+  if (rss.status === 'fulfilled') {
+    const items = parseItems(rss.value);
+    result.itemCount = items.length;
+    const withCode = items.map((it) => ({ title: it.title, code: extractCode(it.title) }));
+    result.recognized = withCode.filter((x) => x.code).length;
+    result.sample = withCode.slice(0, 5);
+    result.ok = true;
+  } else {
+    result.reason = rss.reason?.reason || 'network';
+    result.message = rss.reason?.message || 'Не удалось получить RSS-ленту';
+  }
+  return result;
+}
+
+// Запускает внеочередной прогон (например, после смены настроек форума).
+export function triggerForumSync() {
+  if (DISABLED) return;
+  syncForumAppeals().catch((e) => console.warn('[forum-sync] ошибка:', e.message));
 }
 
 export function startForumSync() {

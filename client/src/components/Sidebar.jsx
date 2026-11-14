@@ -1,21 +1,29 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { MINISTRY_NAME, STATE_NAME } from '../constants.js';
+import { useSite } from '../context/SiteContext.jsx';
+import { MINISTRY_NAME } from '../constants.js';
 import Avatar from './Avatar.jsx';
+import Icon from './Icon.jsx';
 
-const NAV = [
-  { to: '/', label: 'Главная', icon: '🏛️', end: true },
-  { to: '/profile', label: 'Профиль', icon: '👤' },
-  { to: '/my-templates', label: 'Мои шаблоны', icon: '📝' },
-  { to: '/employees', label: 'Сотрудники', icon: '👥' },
-  { to: '/prosecutor', label: 'Прокуратура', icon: '📜' },
-  { to: '/appeals', label: 'Обращения', icon: '📨' },
-  { to: '/general-prosecutor', label: 'Генеральная прокуратура', icon: '⚜️', perm: 'viewGeneral' },
-  { to: '/admin', label: 'Админ-панель', icon: '⚖️', perm: 'accessAdmin' },
+// Группы меню разделены линией: ежедневная работа, состав, управление.
+const GROUPS = [
+  [
+    { to: '/', label: 'Главная', icon: 'home', end: true },
+    { to: '/appeals', label: 'Обращения', icon: 'appeals' },
+    { to: '/prosecutor', label: 'Прокуратура', icon: 'docs' },
+    { to: '/general-prosecutor', label: 'Генеральная прокуратура', icon: 'general', perm: 'viewGeneral' },
+    { to: '/my-templates', label: 'Мои шаблоны', icon: 'templates' },
+  ],
+  [
+    { to: '/employees', label: 'Сотрудники', icon: 'staff' },
+    { to: '/profile', label: 'Профиль', icon: 'profile' },
+  ],
+  [{ to: '/admin', label: 'Админ-панель', icon: 'admin', perm: 'accessAdmin' }],
 ];
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
+  const { stateName } = useSite();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -23,42 +31,51 @@ export default function Sidebar() {
     navigate('/login', { replace: true });
   };
 
+  const groups = GROUPS.map((g) => g.filter((i) => !i.perm || user.permissions?.[i.perm])).filter(
+    (g) => g.length,
+  );
+
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-logo">⚖</div>
+        <div className="brand-mark">
+          <Icon name="emblem" />
+        </div>
         <div className="brand-text">
           <div className="brand-title">{MINISTRY_NAME}</div>
-          <div className="brand-sub">{STATE_NAME}</div>
+          {stateName && <div className="brand-sub">{stateName}</div>}
         </div>
       </div>
 
       <nav className="nav">
-        {NAV.filter((i) => !i.perm || user.permissions?.[i.perm]).map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
-          >
-            <span className="nav-icon">{item.icon}</span>
-            <span>{item.label}</span>
-          </NavLink>
+        {groups.map((g, gi) => (
+          <div className="nav-group" key={gi}>
+            {g.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+              >
+                <Icon name={item.icon} className="nav-icon" />
+                <span>{item.label}</span>
+              </NavLink>
+            ))}
+          </div>
         ))}
-        <button className="nav-item nav-logout" onClick={handleLogout}>
-          <span className="nav-icon">🚪</span>
-          <span>Выйти</span>
-        </button>
       </nav>
 
       <div className="sidebar-user">
-        <Avatar user={user} size={42} />
+        <Avatar user={user} size={34} />
         <div className="sidebar-user-info">
           <div className="sidebar-user-name">{user.name}</div>
           <div className="sidebar-user-role" style={{ color: user.levelColor }}>
             {user.levelName}
           </div>
         </div>
+        <button className="logout-btn" onClick={handleLogout} title="Выйти" aria-label="Выйти">
+          <Icon name="logout" />
+        </button>
       </div>
     </aside>
   );

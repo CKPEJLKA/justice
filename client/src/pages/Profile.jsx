@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import Avatar from '../components/Avatar.jsx';
-import StatCard from '../components/StatCard.jsx';
+import Icon from '../components/Icon.jsx';
+import PageHeader from '../components/PageHeader.jsx';
+import StatStrip from '../components/StatStrip.jsx';
 
 function formatDate(s) {
   if (!s) return '—';
@@ -20,56 +22,72 @@ export default function Profile() {
 
   return (
     <div className="page">
-      <header className="hero card">
-        <Avatar user={user} size={88} />
-        <div className="hero-info">
-          <div className="hero-eyebrow">ПРОФИЛЬ</div>
-          <h1 className="hero-name">{user.name}</h1>
-          <div className="hero-role" style={{ color: user.levelColor }}>
-            {user.levelName}
-          </div>
-        </div>
-      </header>
+      <PageHeader title="Профиль" />
 
-      <section className="card">
-        <div className="section-eyebrow">ОБРАЩЕНИЯ</div>
-        <h2 className="section-title">Моя статистика</h2>
-        <p className="section-sub">Обращения, на которые вы были назначены прокурором.</p>
-        <div className="stat-grid">
-          <StatCard icon="✅" label="Рассмотрено" value={stats?.reviewed ?? '—'} accent="#6cc18e" />
-          <StatCard icon="⏳" label="В работе" value={stats?.inProgress ?? '—'} />
-          <StatCard icon="📨" label="Всего назначено" value={stats?.total ?? '—'} />
+      <section className="panel">
+        <div className="panel-head">
+          <h2 className="panel-title">Личные данные</h2>
+        </div>
+        <div className="profile">
+          <Avatar user={user} size={96} />
+          <dl className="info-list">
+            <div className="info-row">
+              <dt>Имя</dt>
+              <dd>
+                <b>{user.name}</b>
+              </dd>
+            </div>
+            <div className="info-row">
+              <dt>Должность</dt>
+              <dd>
+                <span className="level-badge" style={{ color: user.levelColor }}>
+                  {user.levelName}
+                </span>
+                {user.isSuperuser && (
+                  <span
+                    className="tag superuser-badge"
+                    style={{ marginLeft: 8 }}
+                    title="Абсолютные права независимо от должности. Эту метку видите только вы."
+                  >
+                    <Icon name="key" />
+                    Суперпользователь
+                  </span>
+                )}
+              </dd>
+            </div>
+            <div className="info-row">
+              <dt>Discord</dt>
+              <dd>@{user.username}</dd>
+            </div>
+            <div className="info-row">
+              <dt>Discord ID</dt>
+              <dd className="mono">{user.discordId}</dd>
+            </div>
+            <div className="info-row">
+              <dt>В системе с</dt>
+              <dd>{formatDate(user.createdAt)}</dd>
+            </div>
+          </dl>
         </div>
       </section>
 
-      <section className="card">
-        <h2 className="section-title">Личные данные</h2>
-        <dl className="info-list">
-          <div className="info-row">
-            <dt>Отображаемое имя</dt>
-            <dd>{user.name}</dd>
-          </div>
-          <div className="info-row">
-            <dt>Discord username</dt>
-            <dd>@{user.username}</dd>
-          </div>
-          <div className="info-row">
-            <dt>Discord ID</dt>
-            <dd className="mono">{user.discordId}</dd>
-          </div>
-          <div className="info-row">
-            <dt>Должность</dt>
-            <dd>
-              <span className="level-badge" style={{ borderColor: user.levelColor, color: user.levelColor }}>
-                {user.levelName}
-              </span>
-            </dd>
-          </div>
-          <div className="info-row">
-            <dt>В системе с</dt>
-            <dd>{formatDate(user.createdAt)}</dd>
-          </div>
-        </dl>
+      <section className="panel">
+        <div className="panel-head">
+          <h2 className="panel-title">Мои обращения</h2>
+        </div>
+        <p className="panel-note">Обращения, на которые вы были назначены прокурором.</p>
+        <StatStrip
+          items={[
+            { label: 'В работе', value: stats?.inProgress },
+            {
+              label: 'Рассмотрено',
+              value: stats?.reviewed,
+              tone: stats?.reviewed > 0 ? 'ok' : undefined,
+              title: 'Включая отказанные',
+            },
+            { label: 'Всего назначено', value: stats?.total },
+          ]}
+        />
       </section>
     </div>
   );

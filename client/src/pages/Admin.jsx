@@ -3,6 +3,9 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import { MIN_PANEL_LEVEL, ADMIN_ROLE_LEVEL, TOP_LEVEL } from '../constants.js';
 import Avatar from '../components/Avatar.jsx';
+import AdminTabs from '../components/AdminTabs.jsx';
+import Icon from '../components/Icon.jsx';
+import PageHeader from '../components/PageHeader.jsx';
 
 const ERRORS = {
   no_authorize_permission: 'У вас нет права выдавать или снимать доступ пользователям.',
@@ -15,6 +18,7 @@ const ERRORS = {
   admin_delete_minister_only: 'Удалить Администратора может только министр.',
   cannot_delete_self: 'Нельзя удалить самого себя.',
   cannot_delete_minister: 'Нельзя удалить министра — сначала передайте роль.',
+  cannot_delete_protected: 'Этого пользователя нельзя удалить.',
 };
 
 export default function Admin() {
@@ -43,7 +47,7 @@ export default function Admin() {
     .filter(
       (l) =>
         l.value !== TOP_LEVEL &&
-        l.value < me.accessLevel &&
+        (me.isSuperuser || l.value < me.accessLevel) &&
         (l.value !== ADMIN_ROLE_LEVEL || me.permissions.manageAdmins) &&
         (l.value >= MIN_PANEL_LEVEL || me.permissions.authorizeUsers),
     )
@@ -52,6 +56,7 @@ export default function Admin() {
   const canEditLevel = (t) => {
     if (!me.permissions.changeRoles) return false;
     if (t.accessLevel === TOP_LEVEL) return false; // министр — только через передачу
+    if (me.isSuperuser) return true; // суперпользователь — без ограничений по уровню
     if (t.accessLevel === ADMIN_ROLE_LEVEL && !me.permissions.manageAdmins) return false; // админа меняет только министр
     if (t.accessLevel > me.accessLevel) return false;
     if (t.accessLevel < MIN_PANEL_LEVEL && !me.permissions.authorizeUsers) return false;
@@ -64,7 +69,7 @@ export default function Admin() {
     t.discordId !== me.discordId &&
     t.accessLevel !== TOP_LEVEL &&
     (t.accessLevel !== ADMIN_ROLE_LEVEL || me.permissions.manageAdmins) &&
-    t.accessLevel <= me.accessLevel;
+    (me.isSuperuser || t.accessLevel <= me.accessLevel);
 
   const handleError = (e) => setError(ERRORS[e.message] || 'Не удалось выполнить действие.');
 
@@ -119,34 +124,33 @@ export default function Admin() {
 
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
-          <div className="section-eyebrow">УПРАВЛЕНИЕ</div>
-          <h1 className="page-title">Админ-панель</h1>
-        </div>
-        {users && <div className="count-pill">{users.length}</div>}
-      </header>
+      <PageHeader title="Пользователи" crumbs={[{ label: 'Админ-панель' }]} />
+      <AdminTabs />
 
-      <p className="section-sub" style={{ marginTop: -8 }}>
-        Управление сотрудниками. Пользователь появляется здесь после первого входа через Discord.
-        {me.permissions.changeNames
-          ? ' Вы можете изменять роли и имена.'
-          : me.permissions.changeRoles
-            ? ' Вы можете изменять роли сотрудников (без выдачи доступа новым).'
-            : ''}
-      </p>
-
-      {error && <div className="card empty-state error-text">{error}</div>}
+      {error && <div className="card error-text">{error}</div>}
       {!users && !error && <div className="card empty-state">Загрузка…</div>}
 
       {users && (
-        <div className="card table-card">
+        <section className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">Все пользователи</h2>
+            <span className="count-pill">{users.length}</span>
+          </div>
+          <p className="panel-note">
+            Пользователь появляется здесь после первого входа через Discord.
+            {me.permissions.changeNames
+              ? ' Вы можете менять должности и имена.'
+              : me.permissions.changeRoles
+                ? ' Вы можете менять должности сотрудников.'
+                : ''}
+          </p>
+          <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
                 <th>Пользователь</th>
                 <th>Discord ID</th>
-                <th>Уровень доступа</th>
+                <th>Должность</th>
                 {me.permissions.deleteUsers && <th>Действия</th>}
               </tr>
             </thead>
@@ -170,11 +174,13 @@ export default function Admin() {
                               if (e.key === 'Escape') setEditing(null);
                             }}
                           />
-                          <button className="mini-btn save" onClick={() => saveName(u)} disabled={busyId === u.id}>
-                            ✓
+                          <button className="mini-btn save" onClick={() => saveName(u)} disabled={busyId === u.id}
+                            title="Сохранить имя" aria-label="Сохранить имя">
+                            <Icon name="check" />
                           </button>
-                          <button className="mini-btn" onClick={() => setEditing(null)} disabled={busyId === u.id}>
-                            ✕
+                          <button className="mini-btn" onClick={() => setEditing(null)} disabled={busyId === u.id}
+                            title="Отмена" aria-label="Отмена">
+                            <Icon name="close" />
                           </button>
                         </div>
                       ) : (
@@ -185,9 +191,10 @@ export default function Admin() {
                               <button
                                 className="edit-name-btn"
                                 title="Изменить имя"
+                                aria-label="Изменить имя"
                                 onClick={() => startEditName(u)}
                               >
-                                ✎
+                                <Icon name="edit" />
                               </button>
                             )}
                           </div>
@@ -216,10 +223,7 @@ export default function Admin() {
                         ))}
                       </select>
                     ) : (
-                      <span
-                        className="level-badge"
-                        style={{ borderColor: u.levelColor, color: u.levelColor }}
-                      >
+                      <span className="level-badge" style={{ color: u.levelColor }}>
                         {u.levelName}
                       </span>
                     )}
@@ -232,6 +236,7 @@ export default function Admin() {
                           disabled={busyId === u.id}
                           onClick={() => deleteUser(u)}
                         >
+                          <Icon name="trash" />
                           Удалить
                         </button>
                       )}
@@ -241,7 +246,8 @@ export default function Admin() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </section>
       )}
     </div>
   );

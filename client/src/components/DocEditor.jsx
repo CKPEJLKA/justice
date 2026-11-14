@@ -68,7 +68,8 @@ export default function DocEditor({ value, onChange, editable }) {
       </div>
       <div className="doc-pane">
         <div className="doc-pane-head">
-          Предпросмотр{editable ? ' · правка справа меняет только текст' : ''}
+          Предпросмотр
+          {editable && <span className="doc-pane-hint">правка здесь меняет только текст, теги сохраняются</span>}
         </div>
         <div
           ref={previewRef}

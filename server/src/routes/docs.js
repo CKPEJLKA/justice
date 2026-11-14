@@ -2,20 +2,22 @@ import express from 'express';
 import db from '../db.js';
 import { MIN_PANEL_LEVEL, ADVISOR_LEVEL, DEPUTY_LEVEL } from '../config.js';
 import { requireLevel } from '../middleware/auth.js';
+import { logAudit } from '../audit.js';
 
 const router = express.Router();
 
 // Уровень, нужный для просмотра каждого раздела.
 const SCOPES = {
-  prosecutor: { view: MIN_PANEL_LEVEL }, // все сотрудники
-  general: { view: ADVISOR_LEVEL }, // министр, заместитель, советник
+  prosecutor: { view: MIN_PANEL_LEVEL, label: 'Прокуратура' }, // все сотрудники
+  general: { view: ADVISOR_LEVEL, label: 'Генеральная прокуратура' }, // министр, заместитель, советник
 };
+const scopeLabel = (scope) => SCOPES[scope]?.label || scope;
 
 // Проверка доступа к разделу (по :scope).
 function scopeView(req, res, next) {
   const cfg = SCOPES[req.params.scope];
   if (!cfg) return res.status(404).json({ error: 'unknown_scope' });
-  if (!req.user || req.user.access_level < cfg.view) {
+  if (!req.user || (!req.user.isSuperuser && req.user.access_level < cfg.view)) {
     return res.status(403).json({ error: 'forbidden' });
   }
   req.scope = req.params.scope;
@@ -65,17 +67,20 @@ router.post('/:scope/categories', scopeView, requireManage, (req, res) => {
   const info = db
     .prepare('INSERT INTO doc_categories (scope, name) VALUES (?, ?)')
     .run(req.scope, name);
+  logAudit(req.user, 'doc.category_create', `Создал категорию «${name}» (${scopeLabel(req.scope)})`);
   res.json({
     category: toCategory(db.prepare('SELECT * FROM doc_categories WHERE id = ?').get(info.lastInsertRowid)),
   });
 });
 
 router.delete('/:scope/categories/:id', scopeView, requireManage, (req, res) => {
+  const c = db.prepare('SELECT * FROM doc_categories WHERE id = ? AND scope = ?').get(req.params.id, req.scope);
   db.prepare('UPDATE documents SET category_id = NULL WHERE category_id = ? AND scope = ?').run(
     req.params.id,
     req.scope,
   );
   db.prepare('DELETE FROM doc_categories WHERE id = ? AND scope = ?').run(req.params.id, req.scope);
+  if (c) logAudit(req.user, 'doc.category_delete', `Удалил категорию «${c.name}» (${scopeLabel(req.scope)})`);
   res.json({ ok: true });
 });
 
@@ -88,6 +93,7 @@ router.post('/:scope/documents', scopeView, requireManage, (req, res) => {
   const info = db
     .prepare('INSERT INTO documents (scope, category_id, title, content) VALUES (?, ?, ?, ?)')
     .run(req.scope, categoryId, title, String(req.body.content || ''));
+  logAudit(req.user, 'doc.create', `Создал документ «${title}» (${scopeLabel(req.scope)})`);
   res.json({ document: toDocFull(db.prepare('SELECT * FROM documents WHERE id = ?').get(info.lastInsertRowid)) });
 });
 
@@ -119,11 +125,25 @@ router.patch('/:scope/documents/:id', scopeView, requireManage, (req, res) => {
   db.prepare(`UPDATE documents SET ${updates.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(
     ...params,
   );
-  res.json({ document: toDocFull(db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id)) });
+  const after = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+  const parts = [];
+  if (d.title !== after.title) parts.push(`название «${d.title}» → «${after.title}»`);
+  if (d.content !== after.content) parts.push('изменено содержимое');
+  if (d.category_id !== after.category_id) parts.push('изменена категория');
+  if (parts.length) {
+    logAudit(
+      req.user,
+      'doc.update',
+      `Изменил документ «${after.title}» (${scopeLabel(req.scope)}): ${parts.join(', ')}`,
+    );
+  }
+  res.json({ document: toDocFull(after) });
 });
 
 router.delete('/:scope/documents/:id', scopeView, requireManage, (req, res) => {
+  const d = db.prepare('SELECT * FROM documents WHERE id = ? AND scope = ?').get(req.params.id, req.scope);
   db.prepare('DELETE FROM documents WHERE id = ? AND scope = ?').run(req.params.id, req.scope);
+  if (d) logAudit(req.user, 'doc.delete', `Удалил документ «${d.title}» (${scopeLabel(req.scope)})`);
   res.json({ ok: true });
 });
 

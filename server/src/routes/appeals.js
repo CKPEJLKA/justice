@@ -10,9 +10,12 @@ import {
   PROSECUTOR_LEVEL,
   APPEAL_STATUSES,
   APPEAL_STATUS_ORDER,
+  permissionsFor,
 } from '../config.js';
+import { getForumStatus } from '../forumSync.js';
 import { requireLevel } from '../middleware/auth.js';
 import { notifyAssignment } from '../assignNotify.js';
+import { logAudit } from '../audit.js';
 
 const router = express.Router();
 // Управление обращениями — министр, заместитель, советник.
@@ -122,6 +125,34 @@ function prosecutorsWithCounts() {
 
 const statusList = () => APPEAL_STATUS_ORDER.map((key) => ({ key, ...APPEAL_STATUSES[key] }));
 
+// --- Журнал: человекочитаемое описание изменений обращения ---
+const nameById = (id) => {
+  if (!id) return '—';
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  return u ? userName(u) : `#${id}`;
+};
+const statusLabel = (s) => APPEAL_STATUSES[s]?.label || s || '—';
+
+function describeAppealChanges(before, after) {
+  const parts = [];
+  if (before.title !== after.title) parts.push(`Название: «${before.title}» → «${after.title}»`);
+  if (before.status !== after.status) {
+    parts.push(`Статус: ${statusLabel(before.status)} → ${statusLabel(after.status)}`);
+  }
+  if (before.assigned_user_id !== after.assigned_user_id) {
+    parts.push(`Прокурор: ${nameById(before.assigned_user_id)} → ${nameById(after.assigned_user_id)}`);
+  }
+  if (before.assistant_user_id !== after.assistant_user_id) {
+    parts.push(`Помощник: ${nameById(before.assistant_user_id)} → ${nameById(after.assistant_user_id)}`);
+  }
+  if ((before.applicant || '') !== (after.applicant || '')) {
+    parts.push(`Заявитель: ${before.applicant || '—'} → ${after.applicant || '—'}`);
+  }
+  if ((before.forum_url || '') !== (after.forum_url || '')) parts.push('изменена ссылка на форум');
+  if ((before.note || '') !== (after.note || '')) parts.push('изменена заметка');
+  return parts;
+}
+
 // Дата сброса счётчика рассмотренных (после неё начинается новый отсчёт).
 function statsResetAt() {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'appeal_stats_reset_at'").get();
@@ -152,7 +183,7 @@ export function appealStatsFor(uid) {
 }
 
 // Список обращений + прокуроры + справочник статусов.
-router.get('/', requireLevel(MIN_PANEL_LEVEL), (_req, res) => {
+router.get('/', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
   // Сортировка по номеру CP (по убыванию). Обращения без кода (созданные
   // вручную) идут после — по дате создания.
   const appeals = db
@@ -171,6 +202,10 @@ router.get('/', requireLevel(MIN_PANEL_LEVEL), (_req, res) => {
     assignees: assigneeCandidates(),
     assistants: assistantCandidates(),
     statuses: statusList(),
+    // Состояние импорта с форума — только советникам и выше.
+    ...(permissionsFor(req.user.access_level, req.user.isSuperuser).viewForumStatus
+      ? { forumStatus: getForumStatus() }
+      : {}),
   });
 });
 
@@ -180,11 +215,12 @@ router.get('/my-stats', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
 });
 
 // Сброс счётчика рассмотренных у всех сотрудников — министр и заместители.
-router.post('/reset-stats', requireLevel(DEPUTY_LEVEL), (_req, res) => {
+router.post('/reset-stats', requireLevel(DEPUTY_LEVEL), (req, res) => {
   db.prepare(
     `INSERT INTO settings (key, value) VALUES ('appeal_stats_reset_at', datetime('now'))
      ON CONFLICT(key) DO UPDATE SET value = datetime('now')`,
   ).run();
+  logAudit(req.user, 'appeal.reset_stats', 'Сбросил счётчик рассмотренных обращений у всех сотрудников');
   res.json({ ok: true });
 });
 
@@ -224,6 +260,13 @@ router.post('/', requireManage, (req, res) => {
   if (ARCHIVABLE_STATUSES.has(status)) {
     db.prepare("UPDATE appeals SET reviewed_at = datetime('now') WHERE id = ?").run(info.lastInsertRowid);
   }
+  logAudit(
+    req.user,
+    'appeal.create',
+    `Создал обращение «${title}» (статус: ${statusLabel(status)}` +
+      (assignedUserId ? `, прокурор: ${nameById(assignedUserId)}` : '') +
+      ')',
+  );
   res.json({ appeal: publicAppeal(db.prepare('SELECT * FROM appeals WHERE id = ?').get(info.lastInsertRowid)) });
 });
 
@@ -231,7 +274,7 @@ router.patch('/:id', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
   const a = db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id);
   if (!a) return res.status(404).json({ error: 'not_found' });
 
-  const canManage = req.user.access_level >= ADVISOR_LEVEL;
+  const canManage = req.user.isSuperuser || req.user.access_level >= ADVISOR_LEVEL;
   const isAssignedProsecutor = a.assigned_user_id && a.assigned_user_id === req.user.id;
 
   // Поля, доступные только руководству.
@@ -298,7 +341,12 @@ router.patch('/:id', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
   db.prepare(`UPDATE appeals SET ${updates.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(
     ...params,
   );
-  res.json({ appeal: publicAppeal(db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id)) });
+  const after = db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id);
+  const changes = describeAppealChanges(a, after);
+  if (changes.length) {
+    logAudit(req.user, 'appeal.update', `Обращение «${after.title}»: ${changes.join('; ')}`);
+  }
+  res.json({ appeal: publicAppeal(after) });
 });
 
 // Взять обращение в работу — назначить себя (все, кроме помощников). Без уведомления.
@@ -313,6 +361,7 @@ router.post('/:id/take', requireLevel(PROSECUTOR_LEVEL), (req, res) => {
     req.user.id,
     req.params.id,
   );
+  logAudit(req.user, 'appeal.take', `Взял в работу обращение «${a.title}»`);
   res.json({ appeal: publicAppeal(db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id)) });
 });
 
@@ -333,11 +382,19 @@ router.post('/:id/notify', requireLevel(ADVISOR_LEVEL), (req, res) => {
     prosecutorDiscordId: target.discord_id,
     forumUrl: a.forum_url,
   });
+  logAudit(
+    req.user,
+    'appeal.notify',
+    `Отправил уведомление в Discord ведущему прокурору ${userName(target)} по обращению «${a.title}»`,
+  );
   res.json({ ok: true });
 });
 
 router.delete('/:id', requireManage, (req, res) => {
+  const a = db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id);
+  if (!a) return res.status(404).json({ error: 'not_found' });
   db.prepare('DELETE FROM appeals WHERE id = ?').run(req.params.id);
+  logAudit(req.user, 'appeal.delete', `Удалил обращение «${a.title}» (статус: ${statusLabel(a.status)})`);
   res.json({ ok: true });
 });
 

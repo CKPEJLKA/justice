@@ -42,22 +42,34 @@ export const ACCESS_LEVELS = {
   100: { name: 'Министр юстиции', short: 'Министр', color: '#e8c660' },
 };
 
-// Права, вычисляемые по уровню доступа.
-export function permissionsFor(level) {
+// Суперпользователь — Discord ID из ADMIN_DISCORD_IDS. Имеет абсолютные права
+// независимо от своего уровня доступа (уровень влияет только на отображение роли).
+export function isSuperuserId(discordId) {
+  return config.adminDiscordIds.includes(String(discordId));
+}
+
+// Права, вычисляемые по уровню доступа (суперпользователь получает всё).
+export function permissionsFor(level, isSuperuser = false) {
+  const s = !!isSuperuser;
   return {
-    accessAdmin: level >= ADMIN_LEVEL, // министр, заместитель, советник
-    changeRoles: level >= ADVISOR_LEVEL, // министр, заместитель, советник
-    authorizeUsers: level >= ADVISOR_LEVEL, // министр, заместитель, советник (выдача/снятие доступа)
-    deleteUsers: level >= DEPUTY_LEVEL, // министр, заместитель — полное удаление из базы
-    changeNames: level >= DEPUTY_LEVEL, // министр, заместитель
-    transferMinister: level >= TOP_LEVEL, // только министр
-    manageAdmins: level >= TOP_LEVEL, // только министр — выдача/снятие уровня «Администратор»
-    seePending: level >= ADVISOR_LEVEL, // министр, заместитель, советник
-    manageDocs: level >= DEPUTY_LEVEL, // министр, заместитель — категории и документы
-    viewGeneral: level >= ADVISOR_LEVEL, // министр, заместитель, советник — Ген. прокуратура
-    manageAppeals: level >= ADVISOR_LEVEL, // министр, заместитель, советник — обращения
-    resetStats: level >= DEPUTY_LEVEL, // министр, заместитель — сброс счётчика рассмотренных
-    takeAppeals: level >= PROSECUTOR_LEVEL, // все, кроме помощников прокурора — «взять в работу»
+    accessAdmin: s || level >= ADMIN_LEVEL, // министр, заместитель, советник
+    changeRoles: s || level >= ADVISOR_LEVEL, // министр, заместитель, советник
+    authorizeUsers: s || level >= ADVISOR_LEVEL, // министр, заместитель, советник (выдача/снятие доступа)
+    deleteUsers: s || level >= DEPUTY_LEVEL, // министр, заместитель — полное удаление из базы
+    changeNames: s || level >= DEPUTY_LEVEL, // министр, заместитель
+    transferMinister: s || level >= TOP_LEVEL, // только министр
+    manageAdmins: s || level >= TOP_LEVEL, // только министр — выдача/снятие уровня «Администратор»
+    seePending: s || level >= ADVISOR_LEVEL, // министр, заместитель, советник
+    manageDocs: s || level >= DEPUTY_LEVEL, // министр, заместитель — категории и документы
+    viewGeneral: s || level >= ADVISOR_LEVEL, // министр, заместитель, советник — Ген. прокуратура
+    manageAppeals: s || level >= ADVISOR_LEVEL, // министр, заместитель, советник — обращения
+    resetStats: s || level >= DEPUTY_LEVEL, // министр, заместитель — сброс счётчика рассмотренных
+    takeAppeals: s || level >= PROSECUTOR_LEVEL, // все, кроме помощников прокурора — «взять в работу»
+    manageSettings: s || level >= TOP_LEVEL, // только министр — настройки сайта (сервер, форум, уведомления)
+    manageForumCookie: s, // только суперпользователь — cookie авторизации на форуме
+    viewForumStatus: s || level >= ADVISOR_LEVEL, // советник и выше — индикатор «Форум недоступен»
+    viewAudit: s || level >= DEPUTY_LEVEL, // министр, заместитель — журнал аудита
+    deleteAudit: s, // только суперпользователь — удаление записей журнала
   };
 }
 

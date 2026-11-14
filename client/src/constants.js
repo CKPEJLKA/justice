@@ -8,8 +8,6 @@ export const ADMIN_ROLE_LEVEL = 95;
 export const TOP_LEVEL = 100;
 
 export const MINISTRY_NAME = 'Министерство юстиции';
-export const STATE_NAME = 'штат Senora';
 
-// Раздел игрового форума, где создаются обращения в прокуратуру.
-export const APPEALS_FORUM_URL =
-  'https://forum.gta5rp.com/forums/obraschenija-v-prokuraturu.2082/';
+// Название сервера и раздел форума с обращениями теперь берутся из настроек сайта
+// (админ-панель → Настройки), см. context/SiteContext.jsx.

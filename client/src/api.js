@@ -27,6 +27,23 @@ export const api = {
     req('/admin/transfer-minister', { method: 'POST', body: JSON.stringify({ targetId }) }),
   deleteUser: (id) => req(`/admin/users/${id}`, { method: 'DELETE' }),
 
+  // --- Настройки сайта ---
+  site: () => req('/site'), // публично: название сервера, раздел форума
+  adminSettings: () => req('/admin/settings'),
+  updateAdminSettings: (body) => req('/admin/settings', { method: 'PATCH', body: JSON.stringify(body) }),
+  // body: { appealsForumUrl?, forumCookie? } — несохранённые значения из формы
+  forumCheck: (body) => req('/admin/settings/forum-check', { method: 'POST', body: JSON.stringify(body) }),
+
+  // --- Журнал аудита ---
+  // params: { category?, before?, limit? }
+  audit: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+    ).toString();
+    return req(`/audit${q ? `?${q}` : ''}`);
+  },
+  deleteAuditEntry: (id) => req(`/audit/${id}`, { method: 'DELETE' }),
+
   // --- Обращения ---
   appeals: () => req('/appeals'),
   appeal: (id) => req(`/appeals/${id}`),

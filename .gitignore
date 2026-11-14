@@ -4,3 +4,6 @@ server/data/
 dist/
 *.log
 .DS_Store
+.claude/
+**/.env.example
+PROJECT_HANDOFF.pdf

@@ -6,7 +6,6 @@ export default function PersonalDocs() {
     <DocumentsView
       scopeKey="personal"
       title="Мои шаблоны"
-      eyebrow="ЛИЧНЫЕ ДОКУМЕНТЫ"
       repo={personalDocsRepo}
       canManage={true}
     />

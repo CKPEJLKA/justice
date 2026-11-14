@@ -1,13 +1,29 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
 import Avatar from '../components/Avatar.jsx';
+import Icon from '../components/Icon.jsx';
+import PageHeader from '../components/PageHeader.jsx';
 
 function formatDate(s) {
   if (!s) return '—';
   const d = new Date(s.replace(' ', 'T') + 'Z');
   return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Moscow' }).format(d);
+}
+
+const CRUMBS = [{ label: 'Обращения', to: '/appeals' }];
+
+// Строка формы «подпись слева — поле справа».
+function Row({ label, htmlFor, children }) {
+  return (
+    <div className="form-row">
+      <label className="form-label" htmlFor={htmlFor}>
+        {label}
+      </label>
+      <div className="form-control">{children}</div>
+    </div>
+  );
 }
 
 export default function AppealProfile() {
@@ -66,7 +82,7 @@ export default function AppealProfile() {
     try {
       await api.takeAppeal(id);
       await load();
-      setActionMsg('Вы назначены на обращение.');
+      setActionMsg('Вы назначены прокурором по обращению.');
     } catch {
       setError('Не удалось взять обращение в работу.');
     }
@@ -77,7 +93,7 @@ export default function AppealProfile() {
     setError(null);
     try {
       await api.notifyAppeal(id);
-      setActionMsg('Уведомление отправлено ведущему прокурору.');
+      setActionMsg('Уведомление отправлено ведущему прокурору в Discord.');
     } catch {
       setError('Не удалось отправить уведомление.');
     }
@@ -113,105 +129,121 @@ export default function AppealProfile() {
     }
   };
 
-  if (error && !appeal) return <div className="page"><div className="card empty-state error-text">{error}</div></div>;
-  if (!appeal || !form) return <div className="page"><div className="card empty-state">Загрузка…</div></div>;
+  if (error && !appeal) {
+    return (
+      <div className="page">
+        <PageHeader title="Обращение" crumbs={CRUMBS} />
+        <div className="card error-text">{error}</div>
+      </div>
+    );
+  }
+  if (!appeal || !form) {
+    return (
+      <div className="page">
+        <PageHeader title="Обращение" crumbs={CRUMBS} />
+        <div className="card empty-state">Загрузка…</div>
+      </div>
+    );
+  }
+
+  const saveLabel = saving ? 'Сохранение…' : dirty ? 'Сохранить' : 'Сохранено';
 
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
-          <Link to="/appeals" className="back-link">← Все обращения</Link>
-          <h1 className="page-title" style={{ marginTop: 6 }}>{appeal.title}</h1>
-        </div>
-        <div className="doc-actions">
-          {canNotify && (
-            <button className="ghost-btn sm" onClick={notifyLead}>
-              Уведомить ведущего прокурора
-            </button>
-          )}
-          {appeal.forumUrl ? (
-            <a className="save-btn" href={appeal.forumUrl} target="_blank" rel="noopener">
-              Перейти на обращение ↗
-            </a>
-          ) : (
-            <button className="save-btn" disabled title="Ссылка не указана">Перейти на обращение</button>
-          )}
-        </div>
-      </header>
+      <PageHeader
+        title={appeal.title}
+        crumbs={CRUMBS}
+        actions={
+          <>
+            {canNotify && (
+              <button className="ghost-btn" onClick={notifyLead}>
+                <Icon name="notify" />
+                Уведомить ведущего прокурора
+              </button>
+            )}
+            {appeal.forumUrl ? (
+              <a className="save-btn" href={appeal.forumUrl} target="_blank" rel="noopener">
+                <Icon name="external" />
+                Открыть на форуме
+              </a>
+            ) : (
+              <button className="save-btn" disabled title="Ссылка на тему не указана">
+                Открыть на форуме
+              </button>
+            )}
+          </>
+        }
+      />
 
       {actionMsg && <div className="card action-msg">{actionMsg}</div>}
+      {error && <div className="card error-text">{error}</div>}
 
-      {error && <div className="card empty-state error-text">{error}</div>}
+      <section className="panel">
+        <div className="panel-head">
+          <h2 className="panel-title">Карточка обращения</h2>
+          <span className="level-badge" style={{ color: appeal.statusColor }}>
+            {appeal.statusLabel}
+          </span>
+        </div>
 
-      <section className="card">
         {canManage ? (
-          <div className="appeal-form">
-            <label className="modal-label">Тема</label>
-            <input className="name-input full" value={form.title} onChange={(e) => set('title', e.target.value)} />
-
-            <label className="modal-label">Ссылка на тему форума</label>
-            <input className="name-input full" value={form.forumUrl} onChange={(e) => set('forumUrl', e.target.value)}
-              placeholder="https://forum.gta5rp.com/threads/..." />
-
-            <label className="modal-label">Заявитель</label>
-            <input className="name-input full" value={form.applicant} onChange={(e) => set('applicant', e.target.value)} />
-
-            <div className="modal-row">
-              <div style={{ flex: 1 }}>
-                <label className="modal-label">Статус</label>
-                <select className="level-select full" value={form.status} onChange={(e) => set('status', e.target.value)}>
-                  {statuses.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="modal-row">
-              <div style={{ flex: 1 }}>
-                <label className="modal-label">Прокурор</label>
-                <select className="level-select full" value={form.assignedUserId} onChange={(e) => set('assignedUserId', e.target.value)}>
-                  <option value="">— не назначен —</option>
-                  {assignees.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.levelName})</option>)}
-                </select>
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="modal-label">Помощник</label>
-                <select className="level-select full" value={form.assistantUserId} onChange={(e) => set('assistantUserId', e.target.value)}>
-                  <option value="">— не назначен —</option>
-                  {assistants.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <label className="modal-label">Заметки</label>
-            <textarea className="appeal-note" value={form.note} onChange={(e) => set('note', e.target.value)}
-              placeholder="Внутренние заметки по обращению…" />
-
-            <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
-              <button className="ghost-btn sm danger-text" onClick={remove}>Удалить обращение</button>
+          <>
+            <Row label="Тема" htmlFor="ap-title">
+              <input id="ap-title" className="name-input full" value={form.title} onChange={(e) => set('title', e.target.value)} />
+            </Row>
+            <Row label="Ссылка на тему форума" htmlFor="ap-url">
+              <input id="ap-url" className="name-input full" value={form.forumUrl}
+                onChange={(e) => set('forumUrl', e.target.value)} placeholder="https://forum.gta5rp.com/threads/..." />
+            </Row>
+            <Row label="Заявитель" htmlFor="ap-applicant">
+              <input id="ap-applicant" className="name-input full" value={form.applicant}
+                onChange={(e) => set('applicant', e.target.value)} />
+            </Row>
+            <Row label="Статус" htmlFor="ap-status">
+              <select id="ap-status" className="level-select full" value={form.status} onChange={(e) => set('status', e.target.value)}>
+                {statuses.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </Row>
+            <Row label="Прокурор" htmlFor="ap-pros">
+              <select id="ap-pros" className="level-select full" value={form.assignedUserId} onChange={(e) => set('assignedUserId', e.target.value)}>
+                <option value="">Не назначен</option>
+                {assignees.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.levelName})</option>)}
+              </select>
+            </Row>
+            <Row label="Помощник" htmlFor="ap-assist">
+              <select id="ap-assist" className="level-select full" value={form.assistantUserId} onChange={(e) => set('assistantUserId', e.target.value)}>
+                <option value="">Не назначен</option>
+                {assistants.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Row>
+            <Row label="Заметки" htmlFor="ap-note">
+              <textarea id="ap-note" className="appeal-note" value={form.note} onChange={(e) => set('note', e.target.value)}
+                placeholder="Внутренние заметки по обращению, видны сотрудникам министерства" />
+            </Row>
+            <div className="panel-foot">
+              <span className="employee-tag spacer">Обновлено {formatDate(appeal.updatedAt)}</span>
+              <button className="ghost-btn danger-text" onClick={remove}>
+                <Icon name="trash" />
+                Удалить
+              </button>
               <button className="save-btn" onClick={save} disabled={saving || !dirty || !form.title.trim()}>
-                {saving ? 'Сохранение…' : dirty ? 'Сохранить' : 'Сохранено'}
+                {saveLabel}
               </button>
             </div>
-          </div>
+          </>
         ) : (
           // Просмотр для рядовых сотрудников
           <>
             <dl className="info-list">
-              <div className="info-row"><dt>Тема</dt><dd>{appeal.title}</dd></div>
-              <div className="info-row"><dt>Статус</dt><dd>
-                <span className="level-badge" style={{ borderColor: appeal.statusColor, color: appeal.statusColor }}>
-                  {appeal.statusLabel}
-                </span>
-              </dd></div>
               <div className="info-row"><dt>Прокурор</dt><dd>
                 {appeal.assignedUser ? (
                   <span className="cell-user"><Avatar user={appeal.assignedUser} size={26} /> {appeal.assignedUser.name}</span>
-                ) : '—'}
+                ) : <span className="muted-dash">Не назначен</span>}
               </dd></div>
               <div className="info-row"><dt>Помощник</dt><dd>
                 {appeal.assistant ? (
                   <span className="cell-user"><Avatar user={appeal.assistant} size={26} /> {appeal.assistant.name}</span>
-                ) : '—'}
+                ) : <span className="muted-dash">Не назначен</span>}
               </dd></div>
               <div className="info-row"><dt>Заявитель</dt><dd>{appeal.applicant || '—'}</dd></div>
               {appeal.note && <div className="info-row"><dt>Заметки</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{appeal.note}</dd></div>}
@@ -220,25 +252,27 @@ export default function AppealProfile() {
 
             {/* Назначенный прокурор может менять статус и назначать помощника */}
             {canEditAssistant && (
-              <div className="assistant-editor">
-                <label className="modal-label">Статус обращения</label>
-                <select className="level-select full" value={form.status}
-                  onChange={(e) => set('status', e.target.value)}>
-                  {statuses.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </select>
-
-                <label className="modal-label" style={{ marginTop: 14 }}>Помощник</label>
-                <div className="assistant-row">
-                  <select className="level-select" value={form.assistantUserId}
+              <>
+                <div className="panel-sep" />
+                <Row label="Статус" htmlFor="ap-status2">
+                  <select id="ap-status2" className="level-select full" value={form.status}
+                    onChange={(e) => set('status', e.target.value)}>
+                    {statuses.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  </select>
+                </Row>
+                <Row label="Помощник" htmlFor="ap-assist2">
+                  <select id="ap-assist2" className="level-select full" value={form.assistantUserId}
                     onChange={(e) => set('assistantUserId', e.target.value)}>
-                    <option value="">— не назначен —</option>
+                    <option value="">Не назначен</option>
                     {assistants.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
+                </Row>
+                <div className="panel-foot">
                   <button className="save-btn" onClick={save} disabled={saving || !dirty}>
-                    {saving ? 'Сохранение…' : dirty ? 'Сохранить' : 'Сохранено'}
+                    {saveLabel}
                   </button>
                 </div>
-              </div>
+              </>
             )}
           </>
         )}
@@ -251,16 +285,13 @@ export default function AppealProfile() {
       </section>
 
       {appeal.forumContent && (
-        <section className="card">
-          <div className="section-eyebrow">ТЕКСТ ОБРАЩЕНИЯ</div>
-          <div className="forum-content" dangerouslySetInnerHTML={{ __html: appeal.forumContent }} style={{ marginTop: 14 }} />
+        <section className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">Текст обращения</h2>
+            {appeal.applicant && <span className="employee-tag">Автор: {appeal.applicant}</span>}
+          </div>
+          <div className="forum-content" dangerouslySetInnerHTML={{ __html: appeal.forumContent }} />
         </section>
-      )}
-
-      {canManage && (
-        <div className="appeal-meta">
-          Обновлено: {formatDate(appeal.updatedAt)}
-        </div>
       )}
     </div>
   );

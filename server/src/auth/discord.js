@@ -1,26 +1,40 @@
 import express from 'express';
 import crypto from 'node:crypto';
-import { config, TOP_LEVEL } from '../config.js';
+import { config, TOP_LEVEL, isSuperuserId } from '../config.js';
 import db from '../db.js';
+import { logAudit } from '../audit.js';
 
 const router = express.Router();
 const DISCORD_API = 'https://discord.com/api';
 
 // Создаёт/обновляет пользователя по данным из Discord, возвращает его discord_id.
+// Уровень существующего пользователя при входе НЕ меняется (в т.ч. у суперпользователя —
+// его абсолютные права не зависят от уровня, а уровень определяет только отображаемую роль).
 function upsertDiscordUser(du) {
-  const isAdmin = config.adminDiscordIds.includes(du.id);
+  const isSuperuser = isSuperuserId(du.id);
   const existing = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(du.id);
   if (existing) {
-    const level = isAdmin ? TOP_LEVEL : existing.access_level;
     db.prepare(
-      `UPDATE users SET username = ?, global_name = ?, avatar = ?, access_level = ?, updated_at = datetime('now')
+      `UPDATE users SET username = ?, global_name = ?, avatar = ?, updated_at = datetime('now')
        WHERE discord_id = ?`,
-    ).run(du.username, du.global_name || null, du.avatar || null, level, du.id);
+    ).run(du.username, du.global_name || null, du.avatar || null, du.id);
   } else {
-    const level = isAdmin ? TOP_LEVEL : 0;
-    db.prepare(
-      `INSERT INTO users (discord_id, username, global_name, avatar, access_level) VALUES (?, ?, ?, ?, ?)`,
-    ).run(du.id, du.username, du.global_name || null, du.avatar || null, level);
+    // Первичная настройка: новый суперпользователь становится министром, если министра ещё нет.
+    const ministerExists = db.prepare('SELECT 1 FROM users WHERE access_level = ?').get(TOP_LEVEL);
+    const level = isSuperuser && !ministerExists ? TOP_LEVEL : 0;
+    const info = db
+      .prepare(
+        `INSERT INTO users (discord_id, username, global_name, avatar, access_level) VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(du.id, du.username, du.global_name || null, du.avatar || null, level);
+    const created = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+    logAudit(
+      created,
+      'user.register',
+      level === TOP_LEVEL
+        ? 'Первый вход на сайт — назначен министром (первичная настройка)'
+        : 'Первый вход на сайт — ожидает выдачи доступа',
+    );
   }
   return du.id;
 }

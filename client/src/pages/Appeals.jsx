@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api.js';
-import { APPEALS_FORUM_URL } from '../constants.js';
+import { useSite } from '../context/SiteContext.jsx';
 import Avatar from '../components/Avatar.jsx';
+import Icon from '../components/Icon.jsx';
+import PageHeader from '../components/PageHeader.jsx';
 
 function StatusBadge({ label, color }) {
   return (
-    <span className="level-badge" style={{ borderColor: color, color }}>
+    <span className="level-badge" style={{ color }}>
       {label}
     </span>
   );
@@ -15,10 +17,11 @@ function StatusBadge({ label, color }) {
 
 function AppealsTable({ rows }) {
   return (
+    <div className="table-wrap">
     <table className="data-table">
       <thead>
         <tr>
-          <th>Тема</th>
+          <th>Обращение</th>
           <th>Статус</th>
           <th>Прокурор</th>
           <th>Действия</th>
@@ -45,10 +48,11 @@ function AppealsTable({ rows }) {
             </td>
             <td>
               <div className="row-actions">
-                <Link to={`/appeals/${a.id}`} className="ghost-btn sm">Профиль</Link>
+                <Link to={`/appeals/${a.id}`} className="ghost-btn sm">Открыть</Link>
                 {a.forumUrl && (
-                  <a className="ghost-btn sm" href={a.forumUrl} target="_blank" rel="noopener">
-                    На обращение ↗
+                  <a className="ghost-btn sm" href={a.forumUrl} target="_blank" rel="noopener" title="Открыть тему на форуме">
+                    <Icon name="external" />
+                    Форум
                   </a>
                 )}
               </div>
@@ -57,11 +61,76 @@ function AppealsTable({ rows }) {
         ))}
       </tbody>
     </table>
+    </div>
+  );
+}
+
+const FORUM_REASONS = {
+  auth: 'форум требует вход — cookie форума не задан или устарел',
+  network: 'нет связи с форумом (сеть или FlareSolverr)',
+  http: 'форум отвечает ошибкой',
+  format: 'форум отдаёт не RSS-ленту — возможно, неверная ссылка на раздел',
+};
+
+const fmtDateTime = (iso) =>
+  new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Moscow',
+  }).format(new Date(iso));
+
+// Подсказка «что делать» в индикаторе.
+// full — суперпользователь (может всё, включая cookie); minister — министр (ссылка на раздел, но не cookie);
+// none — остальные.
+function ForumFixHint({ mode, reason }) {
+  if (mode === 'full') {
+    return (
+      <>
+        Обновите cookie или ссылку в <Link to="/admin/settings">настройках сайта</Link> и нажмите «Проверить
+        доступ к форуму».
+      </>
+    );
+  }
+  if (mode === 'minister') {
+    return reason === 'auth' ? (
+      'Требуется обновить авторизацию сайта на форуме, обратитесь к администрации сайта.'
+    ) : (
+      <>
+        Проверьте ссылку на раздел форума в <Link to="/admin/settings">настройках сайта</Link>. Если не
+        поможет, обратитесь к администрации сайта.
+      </>
+    );
+  }
+  return 'Сообщите министру — исправить можно в настройках сайта.';
+}
+
+// Индикатор «Форум недоступен». Статус приходит с сервера только советникам и выше.
+function ForumStatusBanner({ status, fixMode }) {
+  if (!status || status.state !== 'error') return null;
+  return (
+    <div className="alert alert-danger" role="alert">
+      <Icon name="warning" className="alert-icon" />
+      <div>
+        <div className="alert-title">Форум недоступен, новые обращения не импортируются</div>
+        <div className="alert-text">
+          Причина: {FORUM_REASONS[status.reason] || status.message || 'неизвестна'}.{' '}
+          {status.lastOkAt
+            ? `Последний успешный импорт: ${fmtDateTime(status.lastOkAt)} МСК.`
+            : 'С момента запуска сервера импорт ни разу не прошёл успешно.'}
+        </div>
+        <div className="alert-text">
+          <ForumFixHint mode={fixMode} reason={status.reason} />
+        </div>
+      </div>
+    </div>
   );
 }
 
 export default function Appeals() {
   const { user } = useAuth();
+  const { appealsForumUrl } = useSite();
   const navigate = useNavigate();
   const canManage = !!user.permissions?.manageAppeals;
 
@@ -97,8 +166,30 @@ export default function Appeals() {
     }
   };
 
-  if (error) return <div className="page"><div className="card empty-state error-text">{error}</div></div>;
-  if (!data) return <div className="page"><div className="card empty-state">Загрузка…</div></div>;
+  const header = (
+    <PageHeader
+      title="Обращения"
+      actions={
+        <>
+          {appealsForumUrl && (
+            <a className="ghost-btn" href={appealsForumUrl} target="_blank" rel="noopener">
+              <Icon name="external" />
+              Раздел на форуме
+            </a>
+          )}
+          {canManage && data && (
+            <button className="save-btn" onClick={() => setModal(true)}>
+              <Icon name="add" />
+              Новое обращение
+            </button>
+          )}
+        </>
+      }
+    />
+  );
+
+  if (error) return <div className="page">{header}<div className="card error-text">{error}</div></div>;
+  if (!data) return <div className="page">{header}<div className="card empty-state">Загрузка…</div></div>;
 
   const { appeals, archived = [], prosecutors, assignees, assistants, statuses } = data;
   const inProgressOf = (pid) =>
@@ -106,30 +197,23 @@ export default function Appeals() {
 
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
-          <div className="section-eyebrow">ПРОКУРАТУРА</div>
-          <h1 className="page-title">Обращения</h1>
-        </div>
-        <div className="doc-actions">
-          <a className="ghost-btn sm" href={APPEALS_FORUM_URL} target="_blank" rel="noopener">
-            Раздел на форуме ↗
-          </a>
-          {canManage && (
-            <button className="save-btn" onClick={() => setModal(true)}>
-              + Обращение
-            </button>
-          )}
-        </div>
-      </header>
+      {header}
+
+      <ForumStatusBanner
+        status={data.forumStatus}
+        fixMode={
+          user.permissions?.manageForumCookie ? 'full' : user.permissions?.manageSettings ? 'minister' : 'none'
+        }
+      />
 
       {/* Загруженность прокуроров */}
-      <section className="card">
-        <div className="section-eyebrow">СОТРУДНИКИ</div>
-        <h2 className="section-title">Обращения в работе</h2>
-        <p className="section-sub">Нажмите на число, чтобы увидеть обращения в работе у сотрудника.</p>
+      <section className="panel">
+        <div className="panel-head">
+          <h2 className="panel-title">В работе у сотрудников</h2>
+        </div>
+        <p className="panel-note">Нажмите на число, чтобы увидеть обращения сотрудника.</p>
 
-        {prosecutors.length === 0 && <div className="empty-state">Нет сотрудников.</div>}
+        {prosecutors.length === 0 && <div className="card empty-state">Нет сотрудников.</div>}
 
         <div className="pros-list">
           {prosecutors.map((p) => (
@@ -153,7 +237,7 @@ export default function Appeals() {
               {expanded === p.id && (
                 <div className="pros-appeals">
                   {inProgressOf(p.id).length === 0 ? (
-                    <div className="empty-state">Нет обращений в работе.</div>
+                    <div className="employee-tag">Нет обращений в работе.</div>
                   ) : (
                     inProgressOf(p.id).map((a) => (
                       <Link key={a.id} to={`/appeals/${a.id}`} className="pros-appeal-link">
@@ -170,21 +254,32 @@ export default function Appeals() {
       </section>
 
       {/* Актуальные обращения */}
-      <section className="card table-card">
+      <section className="panel">
+        <div className="panel-head">
+          <h2 className="panel-title">Актуальные обращения</h2>
+          <span className="count-pill">{appeals.length}</span>
+        </div>
         {appeals.length === 0 ? (
-          <div className="empty-state" style={{ padding: 24 }}>Актуальных обращений нет.</div>
+          <div className="card empty-state" style={{ border: 'none' }}>Актуальных обращений нет.</div>
         ) : (
           <AppealsTable rows={appeals} />
         )}
       </section>
 
-      {/* Архив: «Рассмотрено» более 24 часов */}
+      {/* Архив: «Рассмотрено» и «Отказано» дольше 24 часов */}
       {archived.length > 0 && (
-        <section className="card table-card archive-card">
-          <button className="archive-head" onClick={() => setShowArchive((v) => !v)}>
-            <span>🗄 Архив обращений</span>
+        <section className="panel">
+          <button
+            className="archive-head"
+            onClick={() => setShowArchive((v) => !v)}
+            aria-expanded={showArchive}
+          >
+            <Icon name="archive" />
+            <span>Архив</span>
             <span className="count-pill">{archived.length}</span>
-            <span className="archive-toggle">{showArchive ? '▲' : '▼'}</span>
+            <span className="archive-toggle">
+              {showArchive ? 'Свернуть' : 'Показать'} <Icon name={showArchive ? 'collapse' : 'expand'} />
+            </span>
           </button>
           {showArchive && <AppealsTable rows={archived} />}
         </section>
@@ -240,7 +335,7 @@ export default function Appeals() {
             <div className="modal-actions">
               <button className="ghost-btn" onClick={() => setModal(false)}>Отмена</button>
               <button className="save-btn" onClick={createAppeal} disabled={!draft.title.trim()}>
-                Создать
+                Создать обращение
               </button>
             </div>
           </div>

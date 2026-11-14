@@ -15,7 +15,8 @@
 //   "prosecutorName":     "Roland Cabrera",
 //   "prosecutorDiscordId":"123456789012345678",   // необязательно — для пинга
 //   "siteUrl":            "https://домен/appeals/21",
-//   "forumUrl":           "https://forum.gta5rp.com/threads/..."
+//   "forumUrl":           "https://forum.gta5rp.com/threads/...",
+//   "serverName":         "Senora"                 // название игрового сервера (для подписи)
 // }
 
 const WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
@@ -61,7 +62,11 @@ exports.handler = async (event) => {
     prosecutorDiscordId = '',
     siteUrl = '',
     forumUrl = '',
+    serverName = '',
   } = payload;
+  const footerText = serverName
+    ? `Министерство юстиции штата ${String(serverName).slice(0, 40)}`
+    : 'Министерство юстиции';
 
   const links = [];
   if (siteUrl) links.push(`[Открыть на сайте](${siteUrl})`);
@@ -82,7 +87,7 @@ exports.handler = async (event) => {
         description: `Требуется движение по обращению **${appealTitle}**.`,
         color: 0xe8c660,
         fields,
-        footer: { text: 'Министерство юстиции штата Senora' },
+        footer: { text: footerText },
         timestamp: new Date().toISOString(),
       },
     ],

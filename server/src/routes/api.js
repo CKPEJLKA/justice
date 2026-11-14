@@ -11,9 +11,13 @@ import {
   MIN_PANEL_LEVEL,
   ADMIN_LEVEL,
   permissionsFor,
+  isSuperuserId,
 } from '../config.js';
 import { requireLevel } from '../middleware/auth.js';
 import { appealStatsFor } from './appeals.js';
+import { logAudit, displayName, levelName } from '../audit.js';
+import { getSettings, updateSettings, SETTINGS_FIELDS } from '../siteSettings.js';
+import { checkForumAccess, triggerForumSync } from '../forumSync.js';
 
 const router = express.Router();
 
@@ -49,7 +53,10 @@ function publicUser(u, { includePerms = false } = {}) {
     levelColor: lvl.color,
     createdAt: u.created_at,
   };
-  if (includePerms) out.permissions = permissionsFor(u.access_level);
+  if (includePerms) {
+    out.permissions = permissionsFor(u.access_level, u.isSuperuser);
+    out.isSuperuser = !!u.isSuperuser;
+  }
   return out;
 }
 
@@ -64,6 +71,12 @@ router.get('/me', (req, res) => {
 // Справочник уровней доступа.
 router.get('/meta', (_req, res) => {
   res.json({ levels: ACCESS_LEVELS, topLevel: TOP_LEVEL, minPanelLevel: MIN_PANEL_LEVEL });
+});
+
+// Публичные настройки сайта (нужны и на странице входа): название сервера, раздел форума.
+router.get('/site', (_req, res) => {
+  const { serverName, appealsForumUrl } = getSettings();
+  res.json({ serverName, appealsForumUrl });
 });
 
 // Статистика для главной + текущий министр.
@@ -97,7 +110,7 @@ router.get('/employees', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
       'SELECT * FROM users WHERE access_level >= ? AND access_level != ? ORDER BY access_level DESC, username',
     )
     .all(MIN_PANEL_LEVEL, ADMIN_ROLE_LEVEL);
-  const canViewStats = req.user.access_level >= ADVISOR_LEVEL;
+  const canViewStats = req.user.isSuperuser || req.user.access_level >= ADVISOR_LEVEL;
   const employees = rows.map((u) => {
     const pu = publicUser(u);
     if (canViewStats) pu.appealStats = appealStatsFor(u.id);
@@ -110,7 +123,7 @@ router.get('/employees', requireLevel(MIN_PANEL_LEVEL), (req, res) => {
 router.get('/admin/users', requireLevel(ADMIN_LEVEL), (req, res) => {
   const rows = db.prepare('SELECT * FROM users ORDER BY access_level DESC, created_at').all();
   // Администраторов в списке видит только министр.
-  const canSeeAdmins = permissionsFor(req.user.access_level).manageAdmins;
+  const canSeeAdmins = permissionsFor(req.user.access_level, req.user.isSuperuser).manageAdmins;
   const visible = canSeeAdmins ? rows : rows.filter((u) => u.access_level !== ADMIN_ROLE_LEVEL);
   res.json({ users: visible.map((u) => publicUser(u)) });
 });
@@ -118,7 +131,7 @@ router.get('/admin/users', requireLevel(ADMIN_LEVEL), (req, res) => {
 // Изменение имени и/или уровня доступа.
 router.patch('/admin/users/:id', requireLevel(ADMIN_LEVEL), (req, res) => {
   const actor = req.user;
-  const perms = permissionsFor(actor.access_level);
+  const perms = permissionsFor(actor.access_level, actor.isSuperuser);
   const target = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!target) return res.status(404).json({ error: 'not_found' });
 
@@ -150,8 +163,13 @@ router.patch('/admin/users/:id', requireLevel(ADMIN_LEVEL), (req, res) => {
       return res.status(403).json({ error: 'admin_via_minister' });
     }
     // Нельзя выдать уровень равный своему или выше, и нельзя трогать тех, кто выше тебя.
-    if (newLevel >= actor.access_level) return res.status(403).json({ error: 'above_your_level' });
-    if (target.access_level > actor.access_level) return res.status(403).json({ error: 'target_above_you' });
+    // Суперпользователь этих ограничений не имеет.
+    if (!actor.isSuperuser) {
+      if (newLevel >= actor.access_level) return res.status(403).json({ error: 'above_your_level' });
+      if (target.access_level > actor.access_level) {
+        return res.status(403).json({ error: 'target_above_you' });
+      }
+    }
     // Выдача/снятие доступа (через порог сотрудника) требует права authorizeUsers.
     const crossesAccess =
       (target.access_level < MIN_PANEL_LEVEL && newLevel >= MIN_PANEL_LEVEL) ||
@@ -169,17 +187,44 @@ router.patch('/admin/users/:id', requireLevel(ADMIN_LEVEL), (req, res) => {
   db.prepare(`UPDATE users SET ${updates.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(
     ...params,
   );
-  res.json({ user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)) });
+  const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+
+  // --- Журнал ---
+  // Записи, касающиеся Администраторов, видны только министру/суперпользователю.
+  const involvesAdmin = (lvl) => lvl === ADMIN_ROLE_LEVEL;
+  if (req.body.name !== undefined && displayName(target) !== displayName(updated)) {
+    logAudit(
+      actor,
+      'user.name',
+      `Изменил имя: «${displayName(target)}» → «${displayName(updated)}»` +
+        (updated.display_name ? '' : ' (сброс к имени из Discord)'),
+      { sensitive: involvesAdmin(target.access_level) },
+    );
+  }
+  if (req.body.accessLevel !== undefined && target.access_level !== updated.access_level) {
+    const from = target.access_level;
+    const to = updated.access_level;
+    const who = `«${displayName(updated)}»`;
+    let summary;
+    if (from < MIN_PANEL_LEVEL && to >= MIN_PANEL_LEVEL) summary = `Выдал доступ ${who}: ${levelName(to)}`;
+    else if (from >= MIN_PANEL_LEVEL && to < MIN_PANEL_LEVEL) summary = `Снял доступ ${who} (был: ${levelName(from)})`;
+    else summary = `Изменил уровень доступа ${who}: ${levelName(from)} → ${levelName(to)}`;
+    logAudit(actor, 'user.level', summary, { sensitive: involvesAdmin(from) || involvesAdmin(to) });
+  }
+
+  res.json({ user: publicUser(updated) });
 });
 
-// Передача роли министра (только действующий министр).
+// Передача роли министра (действующий министр или суперпользователь).
+// Суперпользователь может назначить министром кого угодно, в т.ч. себя.
 router.post('/admin/transfer-minister', requireLevel(TOP_LEVEL), (req, res) => {
   const targetId = Number(req.body.targetId);
   const target = db.prepare('SELECT * FROM users WHERE id = ?').get(targetId);
   if (!target) return res.status(404).json({ error: 'not_found' });
-  if (target.discord_id === req.user.discord_id) {
+  if (target.access_level === TOP_LEVEL) {
     return res.status(400).json({ error: 'already_minister' });
   }
+  const oldMinister = db.prepare('SELECT * FROM users WHERE access_level = ? LIMIT 1').get(TOP_LEVEL);
 
   const transfer = db.transaction(() => {
     // Действующий министр становится заместителем.
@@ -195,6 +240,15 @@ router.post('/admin/transfer-minister', requireLevel(TOP_LEVEL), (req, res) => {
   });
   transfer();
 
+  logAudit(
+    req.user,
+    'minister.transfer',
+    oldMinister
+      ? `Передал роль министра: «${displayName(oldMinister)}» → «${displayName(target)}» (прежний министр стал заместителем)`
+      : `Назначил министром «${displayName(target)}»`,
+    { sensitive: target.access_level === ADMIN_ROLE_LEVEL },
+  );
+
   res.json({ ok: true, newMinister: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(targetId)) });
 });
 
@@ -209,15 +263,98 @@ router.delete('/admin/users/:id', requireLevel(DEPUTY_LEVEL), (req, res) => {
   if (target.access_level === TOP_LEVEL) {
     return res.status(400).json({ error: 'cannot_delete_minister' });
   }
+  // Суперпользователя удалить нельзя никому (причину не раскрываем).
+  if (isSuperuserId(target.discord_id)) {
+    return res.status(403).json({ error: 'cannot_delete_protected' });
+  }
   // Администратора может удалить только министр.
-  if (target.access_level === ADMIN_ROLE_LEVEL && req.user.access_level < TOP_LEVEL) {
+  if (
+    target.access_level === ADMIN_ROLE_LEVEL &&
+    req.user.access_level < TOP_LEVEL &&
+    !req.user.isSuperuser
+  ) {
     return res.status(403).json({ error: 'admin_delete_minister_only' });
   }
-  if (target.access_level > req.user.access_level) {
+  if (!req.user.isSuperuser && target.access_level > req.user.access_level) {
     return res.status(403).json({ error: 'target_above_you' });
   }
   db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+  logAudit(req.user, 'user.delete', `Удалил пользователя «${displayName(target)}» (${levelName(target.access_level)})`, {
+    sensitive: target.access_level === ADMIN_ROLE_LEVEL,
+  });
   res.json({ ok: true });
+});
+
+// --- Настройки сайта (только министр; суперпользователь проходит requireLevel всегда) ---
+// Поля superuserOnly (cookie форума) министру не отдаются вовсе — ни поле, ни значение.
+const canManageCookie = (u) => permissionsFor(u.access_level, u.isSuperuser).manageForumCookie;
+
+function settingsPayload(user) {
+  const values = getSettings();
+  const fields = Object.entries(SETTINGS_FIELDS)
+    .filter(([, f]) => !f.superuserOnly || canManageCookie(user))
+    .map(([key, f]) => ({
+      key,
+      label: f.label,
+      secret: !!f.secret,
+      value: values[key],
+    }));
+  return { fields };
+}
+
+router.get('/admin/settings', requireLevel(TOP_LEVEL), (req, res) => {
+  res.json(settingsPayload(req.user));
+});
+
+router.patch('/admin/settings', requireLevel(TOP_LEVEL), (req, res) => {
+  const forbidden = Object.keys(req.body || {}).some(
+    (key) => SETTINGS_FIELDS[key]?.superuserOnly && !canManageCookie(req.user),
+  );
+  if (forbidden) return res.status(403).json({ error: 'forum_cookie_forbidden' });
+  const before = getSettings();
+  let changed;
+  try {
+    changed = updateSettings(req.body || {});
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  if (changed.length) {
+    const after = getSettings();
+    const parts = changed.map((key) => {
+      const f = SETTINGS_FIELDS[key];
+      if (f.secret) return `${f.label}: изменён`;
+      return `${f.label}: «${before[key] || '—'}» → «${after[key] || '—'}»`;
+    });
+    logAudit(req.user, 'settings.update', `Изменил настройки сайта. ${parts.join('; ')}`);
+    // Сменили раздел или cookie форума — сразу проверяем форум, не дожидаясь планового прогона.
+    if (changed.includes('appealsForumUrl') || changed.includes('forumCookie')) triggerForumSync();
+  }
+  res.json({ ...settingsPayload(req.user), changed });
+});
+
+// Проверка доступа к форуму. Можно передать несохранённые значения из формы;
+// не переданные берутся из сохранённых настроек. Ничего не сохраняет.
+// Министр проверяет с сохранённым cookie; свой cookie передать может только суперпользователь.
+router.post('/admin/settings/forum-check', requireLevel(TOP_LEVEL), async (req, res) => {
+  if (req.body?.forumCookie !== undefined && !canManageCookie(req.user)) {
+    return res.status(403).json({ error: 'forum_cookie_forbidden' });
+  }
+  const saved = getSettings();
+  let forumUrl;
+  let cookie;
+  try {
+    forumUrl =
+      req.body?.appealsForumUrl !== undefined
+        ? SETTINGS_FIELDS.appealsForumUrl.normalize(req.body.appealsForumUrl)
+        : saved.appealsForumUrl;
+    cookie =
+      req.body?.forumCookie !== undefined
+        ? SETTINGS_FIELDS.forumCookie.normalize(req.body.forumCookie)
+        : saved.forumCookie;
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  res.json(await checkForumAccess({ forumUrl, cookie }));
 });
 
 export default router;

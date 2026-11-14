@@ -3,9 +3,9 @@ import { useEffect, useState } from 'react';
 // Всё время — по часовому поясу Москвы (МСК, UTC+3).
 const MSK = 'Europe/Moscow';
 const DATE_FMT = new Intl.DateTimeFormat('ru-RU', {
+  weekday: 'long',
   day: 'numeric',
   month: 'long',
-  year: 'numeric',
   timeZone: MSK,
 });
 const TIME_FMT = new Intl.DateTimeFormat('ru-RU', {
@@ -24,11 +24,12 @@ export default function Clock() {
   }, []);
 
   return (
-    <div className="clock">
-      <div className="clock-date">{DATE_FMT.format(now)}</div>
+    <div className="clock" aria-label="Московское время">
       <div className="clock-time">
-        {TIME_FMT.format(now)} <span className="clock-tz">МСК</span>
+        {TIME_FMT.format(now)}
+        <span className="clock-tz">МСК</span>
       </div>
+      <div className="clock-date">{DATE_FMT.format(now)}</div>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import DocEditor from './DocEditor.jsx';
+import Icon from './Icon.jsx';
+import PageHeader from './PageHeader.jsx';
 
 const NO_CATEGORY = 'none';
 
@@ -7,7 +9,7 @@ const NO_CATEGORY = 'none';
 // repo — адаптер с методами list/get/createCategory/deleteCategory/createDoc/updateDoc/deleteDoc.
 // canManage — может ли текущий пользователь редактировать (для личных = всегда true).
 // scopeKey — ключ раздела (для сброса состояния при переключении).
-export default function DocumentsView({ title, eyebrow = 'ДОКУМЕНТЫ', repo, canManage, scopeKey }) {
+export default function DocumentsView({ title, repo, canManage, scopeKey }) {
   const [categories, setCategories] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [categoryId, setCategoryId] = useState('');
@@ -152,21 +154,32 @@ export default function DocumentsView({ title, eyebrow = 'ДОКУМЕНТЫ', r
 
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
-          <div className="section-eyebrow">{eyebrow}</div>
-          <h1 className="page-title">{title}</h1>
-        </div>
-      </header>
+      <PageHeader
+        title={title}
+        actions={
+          canManage && (
+            <>
+              <button className="ghost-btn" onClick={() => { setDraftName(''); setModal('category'); }}>
+                <Icon name="add" />
+                Категория
+              </button>
+              <button className="save-btn" onClick={openDocModal}>
+                <Icon name="add" />
+                Документ
+              </button>
+            </>
+          )
+        }
+      />
 
-      {error && <div className="card empty-state error-text">{error}</div>}
+      {error && <div className="card error-text">{error}</div>}
 
-      <section className="card doc-toolbar">
+      <section className="panel doc-toolbar">
         <div className="doc-selects">
           <div className="field">
             <label>Категория</label>
             <select value={categoryId} onChange={(e) => onCategoryChange(e.target.value)}>
-              <option value="">— выберите категорию —</option>
+              <option value="">Выберите категорию</option>
               <option value={NO_CATEGORY}>Без категории</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -180,7 +193,7 @@ export default function DocumentsView({ title, eyebrow = 'ДОКУМЕНТЫ', r
             <label>Документ</label>
             <select value={docId} disabled={categoryId === ''} onChange={(e) => selectDoc(e.target.value)}>
               <option value="">
-                {categoryId === '' ? 'сначала выберите категорию' : '— выберите документ —'}
+                {categoryId === '' ? 'Сначала выберите категорию' : 'Выберите документ'}
               </option>
               {filteredDocs.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -191,22 +204,17 @@ export default function DocumentsView({ title, eyebrow = 'ДОКУМЕНТЫ', r
           </div>
         </div>
 
-        {canManage && (
+        {canManage && (categoryId && categoryId !== NO_CATEGORY || docId) && (
           <div className="doc-actions">
-            <button className="ghost-btn sm" onClick={() => { setDraftName(''); setModal('category'); }}>
-              + Категория
-            </button>
-            <button className="ghost-btn sm" onClick={openDocModal}>
-              + Документ
-            </button>
             {categoryId && categoryId !== NO_CATEGORY && (
-              <button className="ghost-btn sm danger-text" onClick={deleteCategory}>
+              <button className="ghost-btn danger-text" onClick={deleteCategory}>
                 Удалить категорию
               </button>
             )}
             {docId && (
               <>
-                <button className="ghost-btn sm danger-text" onClick={deleteDocument}>
+                <button className="ghost-btn danger-text" onClick={deleteDocument}>
+                  <Icon name="trash" />
                   Удалить документ
                 </button>
                 <button className="save-btn" onClick={save} disabled={saving || !dirty}>
@@ -226,7 +234,8 @@ export default function DocumentsView({ title, eyebrow = 'ДОКУМЕНТЫ', r
         )
       ) : (
         <div className="card empty-state">
-          Выберите документ для просмотра{canManage ? ' или создайте новый' : ''}.
+          {categoryId === '' ? 'Выберите категорию и документ' : 'Выберите документ'}
+          {canManage ? ' или создайте новый кнопкой «Документ» вверху.' : '.'}
         </div>
       )}
 
