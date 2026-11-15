@@ -863,6 +863,17 @@ select.status-select:disabled {
   cursor: progress;
 }
 
+/* Фильтр по статусу в шапке таблицы обращений */
+.status-filter {
+  height: 30px;
+  min-width: 210px;
+}
+
+.status-filter.is-active {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
 /* Пункты списка — обычным цветом текста, а не цветом текущего статуса */
 select.status-select option {
   color: var(--text);

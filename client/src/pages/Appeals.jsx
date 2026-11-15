@@ -249,7 +249,27 @@ export default function Appeals() {
   const appeals = allAppeals.filter((a) => a.kind === kind);
   const archived = allArchived.filter((a) => a.kind === kind);
   const countOf = (key) => allAppeals.filter((a) => a.kind === key).length;
-  const setKind = (key) => setParams(key === kinds[0].key ? {} : { tab: key }, { replace: true });
+
+  // Вкладка и фильтр статуса хранятся в адресе: /appeals?tab=AP&status=not_taken
+  const updateParams = (patch) => {
+    const next = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    setParams(next, { replace: true });
+  };
+  const setKind = (key) => updateParams({ tab: key === kinds[0].key ? '' : key });
+
+  // Фильтр по статусу (действует на актуальные обращения вкладки и её архив).
+  const statusFilter = statuses.some((s) => s.key === params.get('status')) ? params.get('status') : '';
+  const setStatusFilter = (key) => updateParams({ status: key });
+  const byStatus = (list) => (statusFilter ? list.filter((a) => a.status === statusFilter) : list);
+  const shown = byStatus(appeals);
+  const shownArchived = byStatus(archived);
+  const statusCount = (key) => appeals.filter((a) => a.status === key).length;
+  const filterLabel = statuses.find((s) => s.key === statusFilter)?.label;
+
   const tableProps = { statuses, canEditStatus, onStatusChange: changeStatus, busyId: statusBusyId };
 
   // «В работе у сотрудников» — по всем вкладкам сразу.
@@ -334,19 +354,61 @@ export default function Appeals() {
       <section className="panel">
         <div className="panel-head">
           <h2 className="panel-title">{kindInfo.tab}</h2>
-          <span className="count-pill">{appeals.length}</span>
+          <div className="panel-tools">
+            <label className="employee-tag" htmlFor="status-filter">
+              Статус
+            </label>
+            <select
+              id="status-filter"
+              className={'level-select status-filter' + (statusFilter ? ' is-active' : '')}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">Все статусы ({appeals.length})</option>
+              {statuses.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label} ({statusCount(s.key)})
+                </option>
+              ))}
+            </select>
+            {statusFilter && (
+              <button
+                type="button"
+                className="mini-btn"
+                title="Сбросить фильтр"
+                aria-label="Сбросить фильтр по статусу"
+                onClick={() => setStatusFilter('')}
+              >
+                <Icon name="close" />
+              </button>
+            )}
+            <span className="count-pill" title={statusFilter ? 'Показано с учётом фильтра' : undefined}>
+              {shown.length}
+            </span>
+          </div>
         </div>
-        {appeals.length === 0 ? (
+        {shown.length === 0 ? (
           <div className="card empty-state" style={{ border: 'none' }}>
-            {kind === 'CP' ? 'Актуальных обращений нет.' : 'Актуальных обжалований нет.'}
+            {statusFilter ? (
+              <>
+                Нет {kind === 'CP' ? 'обращений' : 'обжалований'} со статусом «{filterLabel}».{' '}
+                <button type="button" className="ghost-btn sm" onClick={() => setStatusFilter('')}>
+                  Показать все
+                </button>
+              </>
+            ) : kind === 'CP' ? (
+              'Актуальных обращений нет.'
+            ) : (
+              'Актуальных обжалований нет.'
+            )}
           </div>
         ) : (
-          <AppealsTable rows={appeals} {...tableProps} />
+          <AppealsTable rows={shown} {...tableProps} />
         )}
       </section>
 
-      {/* Архив вкладки: «Рассмотрено» и «Отказано» дольше 24 часов */}
-      {archived.length > 0 && (
+      {/* Архив вкладки: «Рассмотрено» и «Отказано» дольше 24 часов (с учётом фильтра) */}
+      {shownArchived.length > 0 && (
         <section className="panel">
           <button
             className="archive-head"
@@ -355,12 +417,12 @@ export default function Appeals() {
           >
             <Icon name="archive" />
             <span>Архив</span>
-            <span className="count-pill">{archived.length}</span>
+            <span className="count-pill">{shownArchived.length}</span>
             <span className="archive-toggle">
               {showArchive ? 'Свернуть' : 'Показать'} <Icon name={showArchive ? 'collapse' : 'expand'} />
             </span>
           </button>
-          {showArchive && <AppealsTable rows={archived} {...tableProps} />}
+          {showArchive && <AppealsTable rows={shownArchived} {...tableProps} />}
         </section>
       )}
 
