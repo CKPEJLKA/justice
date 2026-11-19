@@ -1,7 +1,8 @@
 /* ==========================================================================
    Министерство юстиции — служебная система.
    Тёмная графитовая гамма, «прокурорский синий» акцент, без скруглений.
-   Шрифты ParaType: PT Sans (текст), PT Sans Narrow (заголовки, меню), PT Mono (номера, ID).
+   Шрифты ParaType: PT Sans (текст и всё жирное), PT Sans Narrow (только крупный обычный:
+   заголовок страницы, числа, часы), PT Mono (номера, ID).
    ========================================================================== */
 
 :root {
@@ -143,7 +144,7 @@ h3 {
 }
 
 .brand-title {
-  font: 700 15.5px/1.15 var(--f-narrow);
+  font: 700 14.5px/1.2 var(--f-sans);
   color: #e8eaee;
 }
 
@@ -174,7 +175,7 @@ h3 {
   border-left: 3px solid transparent;
   color: var(--side-text);
   text-decoration: none;
-  font: 400 15.5px/1.2 var(--f-narrow);
+  font: 400 14px/1.25 var(--f-sans);
 }
 
 .nav-item:hover {
@@ -348,7 +349,7 @@ h3 {
   display: flex;
   align-items: center;
   gap: 9px;
-  font: 700 15.5px/1.2 var(--f-narrow);
+  font: 700 14.5px/1.25 var(--f-sans);
   color: #e8eaee;
 }
 
@@ -897,7 +898,7 @@ select.status-select option {
   place-items: center;
   background: #353a44;
   color: var(--dim);
-  font-family: var(--f-narrow);
+  font-family: var(--f-sans);
   font-weight: 700;
 }
 
@@ -923,7 +924,7 @@ select.status-select option {
   padding: 9px 14px;
   background: var(--panel-head);
   border-bottom: 1px solid var(--line);
-  font: 700 13.5px/1.2 var(--f-narrow);
+  font: 700 12.5px/1.2 var(--f-sans);
   color: var(--dim);
   white-space: nowrap;
 }
@@ -1063,7 +1064,7 @@ select.status-select option {
 }
 
 .minister-name {
-  font: 700 22px/1.15 var(--f-narrow);
+  font: 700 20px/1.2 var(--f-sans);
   color: #e8eaee;
 }
 
@@ -1157,7 +1158,7 @@ select.status-select option {
   background: var(--well);
   border: 1px solid #41454e;
   color: var(--text);
-  font: 700 16px/1 var(--f-narrow);
+  font: 700 14px/1 var(--f-sans);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1210,7 +1211,7 @@ select.status-select option {
   background: var(--panel-head);
   border: none;
   color: #e8eaee;
-  font: 700 15.5px/1.2 var(--f-narrow);
+  font: 700 14.5px/1.25 var(--f-sans);
   text-align: left;
 }
 
@@ -1326,7 +1327,7 @@ select.status-select option {
   padding: 10px 14px;
   background: var(--panel-head);
   border-bottom: 1px solid var(--line);
-  font: 700 15px/1.2 var(--f-narrow);
+  font: 700 14px/1.25 var(--f-sans);
 }
 
 .doc-pane-hint {
@@ -1496,7 +1497,7 @@ select.status-select option {
   padding: 12px 18px;
   background: var(--panel-head);
   border-bottom: 1px solid var(--line);
-  font: 700 18px/1.2 var(--f-narrow);
+  font: 700 16.5px/1.25 var(--f-sans);
 }
 
 .modal-label {
